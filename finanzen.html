@@ -70,6 +70,10 @@
   }
   .chip.active{background:var(--ink);color:var(--surface);border-color:var(--ink)}
   .chip.add{color:var(--brand);border-style:dashed;font-weight:600}
+  /* Auf Maus-/Desktop-Geräten umbrechen statt horizontal scrollen */
+  @media (hover:hover) and (pointer:fine){
+    .months{flex-wrap:wrap;overflow-x:visible}
+  }
 
   /* Hero */
   .hero{
@@ -213,7 +217,7 @@
   <div id="viewMonth"></div>
   <div id="viewYear" style="display:none"></div>
 
-  <div class="save-note" id="saveNote">Änderungen werden automatisch gespeichert</div>
+  <div class="save-note" id="saveNote">Änderungen werden automatisch gespeichert · <span id="footVersion"></span></div>
 </div>
 
 <button class="fab" onclick="openMenu()">☰ Menü</button>
@@ -251,12 +255,16 @@
         <button data-kind="turnus">Turnusmäßig</button>
       </div>
     </div>
-    <div class="field" id="addIntvField" style="display:none"><label>Wiederholung – alle wie viele Monate?</label>
-      <div class="intv" id="addIntv">
-        <button data-every="2">2 Monate</button>
-        <button data-every="3" class="on">3 Monate</button>
-        <button data-every="6">6 Monate</button>
-        <button data-every="12">12 Monate</button>
+    <div class="field" id="addIntvField" style="display:none"><label>In welchen Monaten fällt sie an?</label>
+      <div class="intv" id="addMonths"></div>
+    </div>
+    <div id="addPropagate" style="display:none">
+      <div class="field"><label>Betrag auf weitere Monate übertragen</label>
+        <p class="hint" id="propAmtTxt" style="margin:0 0 10px">Aktueller Betrag: –</p>
+        <div class="btn-row">
+          <button class="btn ghost" onclick="propagate('following')">Folgemonate</button>
+          <button class="btn ghost" onclick="propagate('all')">Alle Monate</button>
+        </div>
       </div>
     </div>
     <button class="btn primary" id="addConfirm" onclick="confirmAdd()">Hinzufügen</button>
@@ -277,6 +285,7 @@
     <button class="menu-item" onclick="closeSheets();importData()"><span class="ic">⬆</span><span>Backup laden</span></button>
     <button class="menu-item" onclick="closeSheets();openSync()"><span class="ic">☁</span><span>Cloud-Sync<small id="menuSyncState">Nicht verbunden</small></span></button>
     <button class="btn ghost" style="margin-top:14px" onclick="closeSheets()">Schließen</button>
+    <p style="text-align:center;color:var(--muted);font-size:12px;margin:14px 0 0">Finanzen <span id="menuVersion"></span></p>
   </div>
 </div>
 
@@ -285,6 +294,7 @@
 
 <script>
 "use strict";
+const VERSION="v1.0";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -306,45 +316,80 @@ const MONTH_NAMES=["Januar","Februar","März","April","Mai","Juni","Juli","Augus
 function absIdx(id){ const p=String(id).split("-").map(Number); return p[0]*12+(p[1]-1); }
 function isDue(item,monthId){
   if((item.kind||"monthly")!=="turnus") return true;
+  const mo=(absIdx(monthId)%12)+1; // 1..12
+  if(Array.isArray(item.months)&&item.months.length) return item.months.includes(mo);
+  // Fallback für ältere Daten ohne Monatsliste
   const every=item.every||1;
   let d=absIdx(monthId)-absIdx(item.anchor||monthId);
   return (((d%every)+every)%every)===0;
 }
 
-function tpl(name,amount,kind,every,anchor){
+function tpl(name,amount,kind,months){
   const o={name,amount,kind:kind||"monthly"};
-  if(kind==="turnus"){ o.every=every; o.anchor=anchor; o.baseAmount=amount; }
+  if(kind==="turnus"){ o.months=months.slice(); o.baseAmount=amount; }
   return o;
 }
 function templateSections(){
   return {
     income:[ tpl("Gehalt / Kontostand",4373), tpl("Diana Miete",1076) ],
     basics:[ tpl("Grundernährung",920),tpl("Miete + NK",1890),tpl("Heizung",133),tpl("Strom",65),
-             tpl("GEZ",55,"turnus",3,"2026-07"),tpl("Riesterrente",50),tpl("Private Rentenversicherung",25),
-             tpl("Haftpflicht/Hausrat",12),tpl("Berufsunfähigkeit",50),tpl("Rechtsschutz",100,"turnus",12,"2026-10"),
-             tpl("KFZ Versicherung",0),tpl("ADAC",0,"turnus",12,"2026-05"),tpl("KV",531),tpl("Switch",0) ],
+             tpl("GEZ",55,"turnus",[1,4,7,10]),tpl("Riesterrente",50),tpl("Private Rentenversicherung",25),
+             tpl("Haftpflicht/Hausrat",12),tpl("Berufsunfähigkeit",50),tpl("Rechtsschutz",100,"turnus",[10]),
+             tpl("KFZ Versicherung",0),tpl("ADAC",0,"turnus",[5]),tpl("KV",531),tpl("Switch",0) ],
     savings:[ tpl("gemeinsames Sparen",600),tpl("Sparplan",0),tpl("Trade Republic",1000),tpl("Trade Republic Abo",0) ],
     luxury:[ tpl("Handyvertrag (30.)",15),tpl("Youtube Premium (14.)",13),tpl("Vodafone",30),
-             tpl("Spenden (Nabu/ÄoG)",20),tpl("Trainer Day",20,"turnus",3,"2026-08"),tpl("Puffer",20) ],
+             tpl("Spenden (Nabu/ÄoG)",20),tpl("Trainer Day",20,"turnus",[2,5,8,11]),tpl("Puffer",20) ],
   };
 }
-function seedMonth(year,monthIdx){
-  const t=templateSections();
-  const id=year+"-"+String(monthIdx+1).padStart(2,"0");
-  const sec={};
+function seedSections(id){
+  const t=templateSections(), sec={};
   for(const s of SECTIONS){
     sec[s.key]=t[s.key].map(it=>{
       const r=Object.assign({},it);
+      if(Array.isArray(it.months)) r.months=it.months.slice();
       if(r.kind==="turnus") r.amount=isDue(r,id)?r.baseAmount:0;
       return r;
     });
   }
-  return { id, label:MONTH_NAMES[monthIdx]+" "+year, sections:sec };
+  return sec;
 }
+function monthLabelFor(id){ const a=absIdx(id); return MONTH_NAMES[a%12]+" "+Math.floor(a/12); }
 function defaultState(){
-  const y=2026, months=[];
-  for(let mi=5; mi<=11; mi++) months.push(seedMonth(y,mi));
-  return { schema:3, months, currentId:months[0].id, updatedAt:Date.now() };
+  const startY=2026, startM=5; // Juni 2026
+  const months=[];
+  for(let k=0;k<12;k++){
+    const a=startY*12+startM+k;
+    const id=Math.floor(a/12)+"-"+String((a%12)+1).padStart(2,"0");
+    months.push({ id, label:monthLabelFor(id), sections:seedSections(id) });
+  }
+  return { schema:4, months, currentId:months[0].id, updatedAt:Date.now() };
+}
+
+/* ---------- rolling 12-month window ---------- */
+function latestMonth(){ return state.months.reduce((a,b)=>absIdx(b.id)>absIdx(a.id)?b:a, state.months[0]); }
+function nextIdAfter(id){ const a=absIdx(id)+1; return Math.floor(a/12)+"-"+String((a%12)+1).padStart(2,"0"); }
+function countOpen(){ return state.months.filter(m=>!m.closed).length; }
+function ensureTwelveOpen(){
+  let guard=0;
+  while(countOpen()<12 && guard++<48){
+    const last=latestMonth();
+    const nid=nextIdAfter(last.id);
+    if(state.months.find(m=>m.id===nid)) break;
+    state.months.push({ id:nid, label:monthLabelFor(nid), sections:buildCarry(last,nid) });
+  }
+}
+// Sortierung für die Monatsleiste: offene Monate zuerst (chronologisch), abgeschlossene hinten.
+function orderedMonths(){
+  const open=state.months.filter(m=>!m.closed).sort((a,b)=>absIdx(a.id)-absIdx(b.id));
+  const closed=state.months.filter(m=>m.closed).sort((a,b)=>absIdx(a.id)-absIdx(b.id));
+  return open.concat(closed);
+}
+function firstOpenId(){ const o=state.months.filter(m=>!m.closed).sort((a,b)=>absIdx(a.id)-absIdx(b.id)); return o.length?o[0].id:state.months[0].id; }
+function normalizeAdopted(){
+  if(!state.months||!state.months.length){ state=defaultState(); return; }
+  state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } });
+  ensureTwelveOpen();
+  if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId();
 }
 
 let state, view="month";
@@ -359,6 +404,8 @@ function load(){
   if(!state.months||!state.months.length) state=defaultState();
   if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id;
   state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } });
+  ensureTwelveOpen();
+  if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId();
   const b=store.get("finanzen.binId"), k=store.get("finanzen.binKey");
   if(b&&k){ sync.binId=b; sync.key=k; sync.connected=true; }
 }
@@ -392,12 +439,18 @@ function render(){
   document.getElementById("viewYear").style.display=view==="year"?"":"none";
   if(view==="month") renderMonth(); else renderYear();
 }
+function chipLabel(m){
+  const a=absIdx(m.id), mo=a%12;
+  let t=MONTH_NAMES[mo];
+  if(mo===0) t+=" '"+String(Math.floor(a/12)).slice(-2); // Januar mit Jahr zur Unterscheidung
+  return t;
+}
 function renderMonths(){
   const el=document.getElementById("months"); el.innerHTML="";
-  state.months.forEach(m=>{
+  orderedMonths().forEach(m=>{
     const b=document.createElement("button");
     b.className="chip"+(m.id===state.currentId?" active":"")+(m.closed?" closed":"");
-    b.innerHTML=(m.closed?'<span class="lock">🔒</span>':"")+m.label.replace(/ \d{4}$/,"");
+    b.innerHTML=(m.closed?'<span class="lock">🔒</span>':"")+chipLabel(m);
     b.onclick=()=>{ state.currentId=m.id; persist(); render(); };
     el.appendChild(b);
   });
@@ -464,7 +517,10 @@ function rowEl(m,key,i,locked){
   const kind=r.kind||"monthly";
   const chip=document.createElement("button"); chip.className="typechip";
   if(kind==="once"){ chip.classList.add("once"); chip.textContent="1×"; chip.title="Einmalig – tippen zum Ändern"; }
-  else if(kind==="turnus"){ chip.classList.add("turnus"); chip.textContent="⟳"+(r.every||"?"); chip.title="Alle "+(r.every||"?")+" Monate – tippen zum Ändern"; }
+  else if(kind==="turnus"){ chip.classList.add("turnus");
+    const ms=Array.isArray(r.months)?r.months:[];
+    chip.textContent="⟳"+(ms.length||"");
+    chip.title=ms.length?("Turnus: "+ms.map(x=>MONTH_SHORT[x-1]).join(", ")+" – tippen zum Ändern"):"Turnusmäßig – tippen zum Ändern"; }
   else { chip.textContent="M"; chip.title="Monatlich – tippen zum Ändern"; }
   if(!locked) chip.onclick=()=>openEditType(key,i);
   // amount
@@ -498,69 +554,121 @@ function rowEl(m,key,i,locked){
 }
 
 /* ---------- add / edit-type sheet ---------- */
-let addCtx={sectionKey:null,kind:"monthly",every:3,edit:null};
+let addCtx={sectionKey:null,kind:"monthly",months:[],edit:null};
+const MONTH_SHORT=["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+(function buildMonthButtons(){
+  const wrap=document.getElementById("addMonths");
+  for(let mo=1;mo<=12;mo++){
+    const b=document.createElement("button");
+    b.dataset.mo=mo; b.textContent=MONTH_SHORT[mo-1];
+    b.onclick=()=>toggleMonth(mo);
+    wrap.appendChild(b);
+  }
+})();
 function setSeg(kind){ addCtx.kind=kind;
   document.querySelectorAll("#addSeg button").forEach(b=>b.classList.toggle("on",b.dataset.kind===kind));
   document.getElementById("addIntvField").style.display=(kind==="turnus")?"":"none";
+  if(kind==="turnus" && addCtx.months.length===0){ setMonths([(absIdx(curMonth().id)%12)+1]); }
 }
-function setIntv(every){ addCtx.every=Number(every);
-  document.querySelectorAll("#addIntv button").forEach(b=>b.classList.toggle("on",Number(b.dataset.every)===Number(every)));
+function renderMonthSel(){
+  document.querySelectorAll("#addMonths button").forEach(b=>b.classList.toggle("on",addCtx.months.includes(Number(b.dataset.mo))));
+}
+function setMonths(arr){ addCtx.months=(arr||[]).slice().sort((a,b)=>a-b); renderMonthSel(); }
+function toggleMonth(mo){
+  const i=addCtx.months.indexOf(mo);
+  if(i>=0) addCtx.months.splice(i,1); else addCtx.months.push(mo);
+  addCtx.months.sort((a,b)=>a-b); renderMonthSel();
 }
 document.querySelectorAll("#addSeg button").forEach(b=>b.onclick=()=>setSeg(b.dataset.kind));
-document.querySelectorAll("#addIntv button").forEach(b=>b.onclick=()=>setIntv(b.dataset.every));
 
 function openAddSheet(sectionKey){
   closeSheets();
-  addCtx={sectionKey,kind:"monthly",every:3,edit:null};
+  addCtx={sectionKey,kind:"monthly",months:[],edit:null};
   document.getElementById("addTitle").textContent="Neue Position";
   document.getElementById("addHint").textContent="Name, Betrag und wie oft sie anfällt.";
   document.getElementById("addAmtField").style.display="";
   document.getElementById("addName").value="";
   document.getElementById("addAmt").value="";
-  setSeg("monthly"); setIntv(3);
+  setSeg("monthly"); setMonths([]);
   document.getElementById("addConfirm").textContent="Hinzufügen";
+  document.getElementById("addPropagate").style.display="none";
   document.getElementById("scrimAdd").classList.add("open");
   setTimeout(()=>document.getElementById("addName").focus(),60);
 }
 function openEditType(key,i){
   closeSheets();
   const r=curMonth().sections[key][i];
-  addCtx={sectionKey:key,kind:r.kind||"monthly",every:r.every||3,edit:{key,i}};
-  document.getElementById("addTitle").textContent="Art der Position";
-  document.getElementById("addHint").textContent='"'+(r.name||"Position")+'" – wie oft fällt sie an?';
+  addCtx={sectionKey:key,kind:r.kind||"monthly",months:Array.isArray(r.months)?r.months.slice():[],edit:{key,i}};
+  document.getElementById("addTitle").textContent="Position bearbeiten";
+  document.getElementById("addHint").textContent='"'+(r.name||"Position")+'" – Art und Betragsübertrag.';
   document.getElementById("addAmtField").style.display="none";
-  setSeg(addCtx.kind); setIntv(addCtx.every);
-  document.getElementById("addConfirm").textContent="Übernehmen";
+  setSeg(addCtx.kind); setMonths(addCtx.months);
+  document.getElementById("addConfirm").textContent="Art übernehmen";
+  // propagation block: nur sinnvoll bei wiederkehrenden Positionen und >1 Monat
+  const prop=document.getElementById("addPropagate");
+  if((r.kind||"monthly")!=="once" && state.months.length>1){
+    const shown=(r.kind==="turnus")?(r.baseAmount!=null?r.baseAmount:r.amount):r.amount;
+    document.getElementById("propAmtTxt").textContent="Wert "+eur.format(Number(shown)||0)+" auf andere Monate übertragen (gesperrte Monate bleiben unberührt):";
+    prop.style.display="";
+  } else { prop.style.display="none"; }
   document.getElementById("scrimAdd").classList.add("open");
+}
+function propagate(scope){
+  if(!addCtx.edit) return;
+  const cur=curMonth();
+  const key=addCtx.edit.key;
+  const r=cur.sections[key][addCtx.edit.i];
+  const name=r.name;
+  const curA=absIdx(cur.id);
+  let count=0, locked=0;
+  state.months.forEach((m)=>{
+    if(m.id===cur.id) return;
+    if(scope==="following" && absIdx(m.id)<=curA) return;
+    if(m.closed){ locked++; return; }
+    const t=(m.sections[key]||[]).find(x=>x.name===name);
+    if(!t) return;
+    if((t.kind||"monthly")==="turnus"){
+      t.baseAmount=(r.baseAmount!=null?r.baseAmount:Number(r.amount)||0);
+      t.amount=isDue(t,m.id)?t.baseAmount:0;
+    } else {
+      t.amount=Number(r.amount)||0;
+    }
+    count++;
+  });
+  persist(); render(); scheduleSync(); closeSheets();
+  toast(count+" Monat"+(count===1?"":"e")+" aktualisiert"+(locked?" · "+locked+" gesperrt übersprungen":""));
 }
 function confirmAdd(){
   const m=curMonth();
   if(addCtx.edit){
     const r=m.sections[addCtx.edit.key][addCtx.edit.i];
+    if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return; }
     r.kind=addCtx.kind;
-    if(addCtx.kind==="turnus"){ r.every=addCtx.every; r.anchor=m.id; if(r.baseAmount==null) r.baseAmount=Number(r.amount)||0; }
-    else { delete r.every; delete r.anchor; delete r.baseAmount; }
+    if(addCtx.kind==="turnus"){ r.months=addCtx.months.slice(); delete r.every; delete r.anchor; if(r.baseAmount==null) r.baseAmount=Number(r.amount)||0; }
+    else { delete r.months; delete r.every; delete r.anchor; delete r.baseAmount; }
     persist(); render(); scheduleSync(); closeSheets(); return;
   }
   const name=document.getElementById("addName").value.trim();
   const amount=parseAmt(document.getElementById("addAmt").value);
   if(!name){ toast("Bezeichnung eingeben"); return; }
+  if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return; }
   const r={name,kind:addCtx.kind,amount};
-  if(addCtx.kind==="turnus"){ r.every=addCtx.every; r.anchor=m.id; r.baseAmount=amount; }
+  if(addCtx.kind==="turnus"){ r.months=addCtx.months.slice(); r.baseAmount=amount; }
   m.sections[addCtx.sectionKey].push(r);
   persist(); render(); scheduleSync(); closeSheets();
   toast(addCtx.kind==="once"?"Einmalige Position hinzugefügt":"Position hinzugefügt");
 }
 function renderYear(){
   const root=document.getElementById("viewYear"); root.innerHTML="";
-  const vals=state.months.map(m=>saldo(m));
+  const list=state.months.slice().sort((a,b)=>absIdx(a.id)-absIdx(b.id));
+  const vals=list.map(m=>saldo(m));
   const max=Math.max(1,...vals.map(v=>Math.abs(v)));
   const card=document.createElement("div"); card.className="year-card";
-  state.months.forEach((m,idx)=>{
+  list.forEach((m,idx)=>{
     const v=vals[idx], w=Math.min(50,Math.abs(v)/max*50);
     const bar=document.createElement("div"); bar.className="ybar";
     bar.innerHTML=`
-      <span class="ym">${m.label}</span>
+      <span class="ym">${(m.closed?"🔒 ":"")+m.label}</span>
       <span class="track"><span class="fill" style="background:${v<0?'var(--neg)':'var(--pos)'};${v<0?`right:50%;width:${w}%`:`left:50%;width:${w}%`}"></span></span>
       <span class="val num ${v<0?'neg':'pos'}">${eur0.format(v)}</span>`;
     bar.onclick=()=>{ state.currentId=m.id; persist(); setView("month"); };
@@ -576,10 +684,9 @@ function setView(v){ view=v; render(); }
 
 /* ---------- month management ---------- */
 function nextMonthId(){
-  const last=state.months[state.months.length-1];
-  const [y,mo]=last.id.split("-").map(Number);
-  let ny=y, nm=mo+1; if(nm>12){nm=1;ny++;}
-  return {id:ny+"-"+String(nm).padStart(2,"0"), label:MONTH_NAMES[nm-1]+" "+ny};
+  const last=latestMonth();
+  const nid=nextIdAfter(last.id);
+  return {id:nid, label:monthLabelFor(nid)};
 }
 function buildCarry(prev,newId){
   const sec={};
@@ -590,7 +697,8 @@ function buildCarry(prev,newId){
       if(kind==="once") return; // einmalige Positionen nicht übernehmen
       const nr={name:r.name,kind};
       if(kind==="turnus"){
-        nr.every=r.every||1; nr.anchor=r.anchor||newId;
+        if(Array.isArray(r.months)) nr.months=r.months.slice();
+        if(r.every) nr.every=r.every; if(r.anchor) nr.anchor=r.anchor;
         nr.baseAmount=(r.baseAmount!=null?r.baseAmount:Number(r.amount)||0);
         nr.amount=isDue(nr,newId)?nr.baseAmount:0;
       } else {
@@ -625,8 +733,11 @@ function deleteMonthFlow(){
 function toggleCloseFlow(){ if(curMonth().closed) reopenMonthFlow(); else closeMonthFlow(); }
 function closeMonthFlow(){
   const m=curMonth();
-  if(confirm('"'+m.label+'" wirklich abschließen?\n\nDer Monat wird danach gegen Änderungen gesperrt. Du kannst ihn jederzeit wieder öffnen oder löschen.')){
-    m.closed=true; persist(); render(); scheduleSync();
+  if(confirm('"'+m.label+'" wirklich abschließen?\n\nDer Monat wird gegen Änderungen gesperrt und rückt in der Leiste nach hinten. Vorne wird automatisch ein neuer Monat ergänzt, sodass immer 12 offene Monate vorhanden sind. Du kannst ihn jederzeit wieder öffnen oder löschen.')){
+    m.closed=true;
+    ensureTwelveOpen();
+    state.currentId=firstOpenId();
+    persist(); render(); scheduleSync();
     toast(m.label+" abgeschlossen");
   }
 }
@@ -649,7 +760,7 @@ document.getElementById("fileInput").onchange=e=>{
   const rd=new FileReader();
   rd.onload=()=>{ try{ const d=JSON.parse(rd.result);
       if(!d.months) throw 0;
-      if(confirm("Backup laden? Aktuelle Daten werden ersetzt.")){ state=d; if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id; persist(); render(); scheduleSync(); toast("Backup geladen"); }
+      if(confirm("Backup laden? Aktuelle Daten werden ersetzt.")){ state=d; normalizeAdopted(); persist(); render(); scheduleSync(); toast("Backup geladen"); }
     }catch(err){ toast("Datei nicht lesbar"); } };
   rd.readAsText(f); e.target.value="";
 };
@@ -698,7 +809,7 @@ async function connectSync(){
   store.set("finanzen.binId",b); store.set("finanzen.binKey",k);
   if(cloud&&cloud.months&&cloud.months.length){
     if(confirm("In der Cloud liegen bereits Daten. Diese auf dieses Gerät übernehmen?\n\nOK = Cloud-Daten verwenden\nAbbrechen = lokale Daten in die Cloud hochladen")){
-      state=cloud; if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id;
+      state=cloud; normalizeAdopted();
       persist(); render(); toast("Cloud-Daten übernommen");
     } else { await push(false); }
   } else { await push(false); toast("Cloud eingerichtet"); }
@@ -707,7 +818,7 @@ async function connectSync(){
 async function manualPull(){
   if(!sync.connected){ toast("Erst verbinden"); return; }
   const d=await pull(false);
-  if(d&&d.months){ state=d; if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id; persist(); render(); toast("Cloud geladen"); }
+  if(d&&d.months){ state=d; normalizeAdopted(); persist(); render(); toast("Cloud geladen"); }
 }
 async function manualPush(){ if(!sync.connected){ toast("Erst verbinden"); return; } await push(false); }
 function disconnectSync(){
@@ -736,8 +847,10 @@ function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg
 
 /* ---------- boot ---------- */
 load();
+document.getElementById("menuVersion").textContent=VERSION;
+document.getElementById("footVersion").textContent=VERSION;
 render();
-if(sync.connected){ setSyncUI("on"); (async()=>{ const d=await pull(true); if(d&&d.months&&(d.updatedAt||0)>(state.updatedAt||0)){ state=d; if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id; persist(); render(); } })(); }
+if(sync.connected){ setSyncUI("on"); (async()=>{ const d=await pull(true); if(d&&d.months&&(d.updatedAt||0)>(state.updatedAt||0)){ state=d; state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } }); ensureTwelveOpen(); if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId(); persist(); render(); } })(); }
 else setSyncUI("local");
 
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }

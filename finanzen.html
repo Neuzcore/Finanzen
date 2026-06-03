@@ -294,7 +294,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.0";
+const VERSION="v1.1";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -598,27 +598,48 @@ function openAddSheet(sectionKey){
 function openEditType(key,i){
   closeSheets();
   const r=curMonth().sections[key][i];
-  addCtx={sectionKey:key,kind:r.kind||"monthly",months:Array.isArray(r.months)?r.months.slice():[],edit:{key,i}};
+  addCtx={sectionKey:key,kind:r.kind||"monthly",months:Array.isArray(r.months)?r.months.slice():[],edit:{key,i},origName:r.name};
   document.getElementById("addTitle").textContent="Position bearbeiten";
-  document.getElementById("addHint").textContent='"'+(r.name||"Position")+'" – Art und Betragsübertrag.';
-  document.getElementById("addAmtField").style.display="none";
+  document.getElementById("addHint").textContent="Bezeichnung, Betrag und Art ändern.";
+  document.getElementById("addName").value=r.name||"";
+  const editVal=(r.kind==="turnus")?(r.baseAmount!=null?r.baseAmount:r.amount):r.amount;
+  document.getElementById("addAmt").value=editVal?String(editVal).replace(".",","):"";
+  document.getElementById("addAmtField").style.display="";
   setSeg(addCtx.kind); setMonths(addCtx.months);
-  document.getElementById("addConfirm").textContent="Art übernehmen";
+  document.getElementById("addConfirm").textContent="Übernehmen";
   // propagation block: nur sinnvoll bei wiederkehrenden Positionen und >1 Monat
   const prop=document.getElementById("addPropagate");
   if((r.kind||"monthly")!=="once" && state.months.length>1){
-    const shown=(r.kind==="turnus")?(r.baseAmount!=null?r.baseAmount:r.amount):r.amount;
-    document.getElementById("propAmtTxt").textContent="Wert "+eur.format(Number(shown)||0)+" auf andere Monate übertragen (gesperrte Monate bleiben unberührt):";
+    document.getElementById("propAmtTxt").textContent="Den oben eingetragenen Betrag auf weitere Monate übertragen (gesperrte Monate bleiben unberührt):";
     prop.style.display="";
   } else { prop.style.display="none"; }
   document.getElementById("scrimAdd").classList.add("open");
 }
+function commitEdit(){
+  if(!addCtx.edit) return false;
+  const m=curMonth();
+  const r=m.sections[addCtx.edit.key][addCtx.edit.i];
+  const nm=document.getElementById("addName").value.trim();
+  if(!nm){ toast("Bezeichnung eingeben"); return false; }
+  if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return false; }
+  const amount=parseAmt(document.getElementById("addAmt").value);
+  r.name=nm; r.kind=addCtx.kind;
+  if(addCtx.kind==="turnus"){
+    r.months=addCtx.months.slice(); delete r.every; delete r.anchor;
+    r.baseAmount=amount; r.amount=isDue(r,m.id)?amount:0;
+  } else {
+    delete r.months; delete r.every; delete r.anchor; delete r.baseAmount;
+    r.amount=amount;
+  }
+  return true;
+}
 function propagate(scope){
   if(!addCtx.edit) return;
+  if(!commitEdit()) return;
   const cur=curMonth();
   const key=addCtx.edit.key;
   const r=cur.sections[key][addCtx.edit.i];
-  const name=r.name;
+  const name=addCtx.origName||r.name; // andere Monate über den ursprünglichen Namen finden
   const curA=absIdx(cur.id);
   let count=0, locked=0;
   state.months.forEach((m)=>{
@@ -641,11 +662,7 @@ function propagate(scope){
 function confirmAdd(){
   const m=curMonth();
   if(addCtx.edit){
-    const r=m.sections[addCtx.edit.key][addCtx.edit.i];
-    if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return; }
-    r.kind=addCtx.kind;
-    if(addCtx.kind==="turnus"){ r.months=addCtx.months.slice(); delete r.every; delete r.anchor; if(r.baseAmount==null) r.baseAmount=Number(r.amount)||0; }
-    else { delete r.months; delete r.every; delete r.anchor; delete r.baseAmount; }
+    if(!commitEdit()) return;
     persist(); render(); scheduleSync(); closeSheets(); return;
   }
   const name=document.getElementById("addName").value.trim();

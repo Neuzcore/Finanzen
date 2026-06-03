@@ -1,5 +1,5 @@
 // Service Worker – Finanzen PWA
-const CACHE = "finanzen-v5";
+const CACHE = "finanzen-v6";
 const ASSETS = [
   "./",
   "./finanzen.html",

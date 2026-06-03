@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packliste</title>
+<meta name="theme-color" content="#b85c38">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Packliste">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Travel-themed palette: warm parchment, terracotta, deep teal */
+    --bg:#faf7f2;              /* warm off-white parchment */
+    --surface:#ffffff;
+    --surface-soft:#f4ede0;    /* soft sand */
+    --surface-warm:#ede4d3;    /* deeper sand for headers */
+    --border:#e5dccb;
+    --border-strong:#cdc0a8;
+    --text:#2b2417;            /* dark espresso, easier than pure black */
+    --text-soft:#4a4032;
+    --muted:#8a7d68;
+    --accent:#b85c38;          /* terracotta, like ticket stamps */
+    --accent-dim:#9d4a2a;
+    --accent-soft:#f5e3d8;
+    --accent2:#2d6a6f;         /* deep teal, like old globes */
+    --accent2-soft:#d9e6e7;
+    --green:#5a7a3e;           /* moss, not neon */
+    --green-soft:#e5ecd9;
+    --amber:#a06820;           /* warm amber, like vintage paper */
+    --amber-soft:#f2e6d0;
+    --red:#a83838;
+    --red-soft:#f3dada;
+    --shadow-sm:0 1px 2px rgba(60,40,20,0.04);
+    --shadow:0 2px 8px rgba(60,40,20,0.07);
+    --shadow-lg:0 12px 32px rgba(60,40,20,0.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-size:15px;
+    line-height:1.5;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:980px;margin:0 auto;padding:0 18px}
+
+  /* ── HEADER ─────────────────────────────────────────────── */
+  header{padding:18px 0 0;margin-bottom:14px}
+  .header-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .logo{font-family:'Instrument Serif',serif;font-size:30px;letter-spacing:-0.01em;color:var(--text);line-height:1}
+  .logo .accent{color:var(--accent);font-style:italic}
+  .version{color:var(--muted);font-size:10px;opacity:0.55;margin-left:6px;font-weight:400}
+
+  /* Cloud sync pill */
+  .cloud-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:5px 10px;border-radius:999px;font-size:11px;font-weight:500;
+    border:1px solid var(--border);background:var(--surface);
+    cursor:pointer;transition:all .15s;
+  }
+  .cloud-pill:hover{border-color:var(--accent);color:var(--accent)}
+  .cloud-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+  .cloud-pill.ok .dot{background:var(--green)}
+  .cloud-pill.busy .dot{background:var(--amber);animation:pulse 1.2s infinite}
+  .cloud-pill.err .dot{background:var(--red)}
+  .cloud-pill.off .dot{background:var(--muted)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* ── TABS (Standardliste / Reisen / Archiv) ─────────────── */
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+  .tab{
+    padding:8px 14px;background:none;border:none;border-bottom:2px solid transparent;
+    color:var(--muted);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;
+    transition:all .15s;margin-bottom:-1px;
+  }
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .tab .count{
+    display:inline-block;margin-left:5px;padding:1px 6px;font-size:10px;
+    background:var(--surface-soft);color:var(--muted);border-radius:999px;
+  }
+  .tab.active .count{background:var(--accent-soft);color:var(--accent)}
+
+  /* ── TOOLBAR ────────────────────────────────────────────── */
+  .toolbar{
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    margin-bottom:14px;
+  }
+  .toolbar .grow{flex:1;min-width:120px}
+  input[type=text],input[type=number],input[type=date],textarea,select{
+    width:100%;padding:9px 12px;border:1px solid var(--border-strong);border-radius:8px;
+    font-family:inherit;font-size:14px;background:var(--surface);color:var(--text);
+    transition:border-color .15s,box-shadow .15s;
+  }
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(37,99,235,0.12);
+  }
+  .btn{
+    padding:9px 16px;border:1px solid var(--border-strong);border-radius:8px;
+    background:var(--surface);color:var(--text);font-family:inherit;font-size:14px;
+    font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.primary:hover{background:var(--accent-dim);border-color:var(--accent-dim);color:#fff}
+  .btn.danger:hover{border-color:var(--red);color:var(--red)}
+  .btn.small{padding:5px 10px;font-size:12px;border-radius:6px}
+  .btn.icon{padding:7px 10px}
+
+  /* ── EMPTY STATE ────────────────────────────────────────── */
+  .empty{
+    text-align:center;padding:60px 20px;color:var(--muted);
+    background:var(--surface);border:1px dashed var(--border-strong);
+    border-radius:14px;margin:14px 0;
+  }
+  .empty h3{font-family:'Instrument Serif',serif;font-size:28px;color:var(--text);margin-bottom:8px;letter-spacing:-0.01em}
+  .empty p{font-size:14px;max-width:480px;margin:0 auto 16px}
+
+  /* ── CATEGORY SECTIONS ──────────────────────────────────── */
+  .category{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    margin-bottom:8px;box-shadow:var(--shadow-sm);overflow:hidden;
+  }
+  .cat-head{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:8px 12px;background:var(--surface-soft);
+    border-bottom:1px solid var(--border);cursor:pointer;user-select:none;
+    position:relative;
+  }
+  .cat-head:hover{background:#e8eef7}
+  /* progress underline */
+  .cat-head::after{
+    content:'';position:absolute;left:0;bottom:-1px;height:2px;
+    background:var(--accent);width:var(--cat-progress,0%);transition:width .25s;
+  }
+  .cat-title{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13px;color:var(--text);
+    text-transform:uppercase;letter-spacing:0.05em;
+  }
+  .cat-chevron{
+    width:10px;height:10px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);
+    transform:rotate(45deg);transition:transform .2s;
+  }
+  .category.collapsed .cat-chevron{transform:rotate(-45deg)}
+  .cat-counter{
+    font-size:11px;font-weight:600;color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .cat-counter.done{color:var(--green)}
+  .cat-body{padding:2px 0}
+  .category.collapsed .cat-body{display:none}
+  .cat-foot{
+    padding:6px 12px 8px;
+  }
+  .cat-add-btn{
+    width:100%;padding:6px 8px;background:none;border:1px dashed var(--border-strong);
+    border-radius:6px;color:var(--muted);font-family:inherit;font-size:12px;
+    cursor:pointer;transition:all .15s;
+  }
+  .cat-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .cat-add-form{display:none;gap:6px;padding:6px 0}
+  .cat-add-form.open{display:flex}
+  .cat-add-form input{padding:6px 9px;font-size:13px;flex:1;min-width:0}
+  .cat-add-form input[name=qty]{flex:0 0 52px}
+  .cat-add-form input[name=note]{flex:1.2}
+  @media(max-width:600px){
+    .cat-add-form{flex-wrap:wrap}
+    .cat-add-form input[name=name]{flex:1 1 100%;order:0}
+    .cat-add-form input[name=qty]{order:1}
+    .cat-add-form input[name=note]{flex:1;order:2}
+    .cat-add-form button{order:3}
+  }
+
+  /* ── ITEM ROW (dichte Listenform) ───────────────────────── */
+  .item{
+    display:flex;align-items:center;gap:10px;
+    padding:5px 12px;min-height:32px;transition:background .12s;
+    border-bottom:1px solid transparent;
+  }
+  .item + .item{border-top:1px solid #f1f4fa}
+  .item:hover{background:#fafbfd}
+  .item.packed{color:var(--muted)}
+  .item.packed .item-name{text-decoration:line-through;text-decoration-color:rgba(100,116,139,0.5)}
+  .item.packed .qty-badge{opacity:0.5}
+
+  /* Big tap-target check */
+  .check{
+    flex-shrink:0;width:22px;height:22px;border:1.5px solid var(--border-strong);
+    border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    background:var(--surface);transition:all .15s;
+  }
+  .check:hover{border-color:var(--accent)}
+  .check.checked{background:var(--accent);border-color:var(--accent)}
+  .check.checked::after{
+    content:'';width:5px;height:10px;border-right:2px solid #fff;border-bottom:2px solid #fff;
+    transform:rotate(45deg) translate(-1px,-1px);
+  }
+  .check.disabled{cursor:default;opacity:0.3;visibility:hidden;width:0;margin:0;padding:0;border:none}
+
+  /* Quantity as a small inline badge, click to edit */
+  .qty-badge{
+    flex-shrink:0;min-width:30px;text-align:center;
+    padding:2px 7px;background:var(--surface-soft);color:var(--text);
+    border-radius:5px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;
+    cursor:pointer;transition:background .15s;border:1px solid transparent;
+  }
+  .qty-badge:hover{background:var(--accent-soft);color:var(--accent)}
+  .qty-badge.editing{background:var(--surface);border-color:var(--accent);padding:0}
+  .qty-badge input{
+    width:38px;padding:2px 4px;border:none;text-align:center;background:transparent;
+    font-family:inherit;font-size:12px;font-weight:600;color:var(--text);
+  }
+  .qty-badge input:focus{outline:none}
+
+  .item-name{flex:1;min-width:0;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item-note{
+    flex-shrink:1;min-width:0;color:var(--amber);font-size:12px;font-style:italic;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%;
+  }
+  .item-note::before{content:'· '}
+  .item-actions{display:flex;gap:0;flex-shrink:0;opacity:0;transition:opacity .15s}
+  .item:hover .item-actions,.item:focus-within .item-actions{opacity:1}
+  .item-actions button{
+    width:24px;height:24px;border:none;background:none;cursor:pointer;
+    color:var(--muted);border-radius:4px;font-size:13px;line-height:1;
+  }
+  .item-actions button:hover{background:var(--surface-soft);color:var(--accent)}
+  .item-actions button.del:hover{color:var(--red)}
+
+  @media(max-width:600px){
+    .item{padding:7px 12px;min-height:38px;gap:8px}
+    .item-actions{opacity:1}
+    .item-note{display:none}  /* on mobile, Notiz nur im Bearbeiten-Dialog – Hinweis via gelber Punkt */
+    .item.has-note .item-name::after{
+      content:' ●';color:var(--amber);font-size:10px;vertical-align:middle;
+    }
+  }
+
+  /* ── TRIPS GRID ─────────────────────────────────────────── */
+  .trips-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .trip-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px 18px 16px 22px;box-shadow:var(--shadow-sm);cursor:pointer;
+    transition:all .15s;display:flex;flex-direction:column;gap:10px;
+    position:relative;overflow:hidden;
+  }
+  .trip-card::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:5px;
+    background:var(--accent);
+  }
+  .trip-card.archived::before{background:var(--muted)}
+  .trip-card:hover{border-color:var(--accent);box-shadow:var(--shadow);transform:translateY(-1px)}
+  .trip-card.archived{opacity:0.78}
+  .trip-name{
+    font-family:'Instrument Serif',serif;font-size:24px;color:var(--text);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-0.01em;line-height:1.1;
+  }
+  .trip-dates{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;letter-spacing:0.06em;text-transform:uppercase;font-weight:500}
+  .trip-progress{
+    height:5px;background:var(--surface-soft);border-radius:999px;overflow:hidden;
+  }
+  .trip-progress-bar{
+    height:100%;background:var(--accent2);border-radius:999px;transition:width .3s;
+  }
+  .trip-stats{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+  .trip-stats strong{color:var(--text);font-weight:600}
+
+  /* ── DIALOG ─────────────────────────────────────────────── */
+  .dialog-backdrop{
+    position:fixed;inset:0;background:rgba(43,36,23,0.5);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .dialog-backdrop.open{display:flex}
+  .dialog{
+    background:var(--surface);border-radius:18px;max-width:520px;width:100%;
+    max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);
+    border:1px solid var(--border);
+  }
+  .dialog-header{
+    padding:20px 24px 14px;border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .dialog-header h2{font-family:'Instrument Serif',serif;font-size:28px;letter-spacing:-0.01em;color:var(--text)}
+  .dialog-close{
+    width:32px;height:32px;border:none;background:none;cursor:pointer;
+    color:var(--muted);font-size:22px;border-radius:8px;
+  }
+  .dialog-close:hover{background:var(--surface-soft);color:var(--text)}
+  .dialog-body{padding:20px 24px}
+  .dialog-footer{
+    padding:14px 24px 20px;display:flex;gap:10px;justify-content:flex-end;
+    border-top:1px solid var(--border);background:var(--surface-soft);
+    border-radius:0 0 18px 18px;
+  }
+  .field{margin-bottom:14px}
+  .field label{
+    display:block;font-size:12px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;
+  }
+  .field .hint{font-size:12px;color:var(--muted);margin-top:5px}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  /* ── HEADER ROW OF ACTIVE TRIP ──────────────────────────── */
+  .trip-header{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;margin-bottom:12px;
+    display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  }
+  .trip-header-info h2{font-family:'Instrument Serif',serif;font-size:26px;letter-spacing:-0.01em;line-height:1.05;color:var(--text)}
+  .trip-header-info .sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .trip-header-info .sub strong{color:var(--text);font-weight:600}
+  .trip-header-actions{display:flex;gap:6px;flex-wrap:wrap}
+  .progress-large{
+    height:4px;background:var(--surface-soft);border-radius:999px;
+    overflow:hidden;margin-top:8px;
+  }
+  .progress-large-bar{height:100%;background:var(--accent);border-radius:999px;transition:width .3s}
+  .trip-toolbar{
+    display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;
+  }
+  .trip-toolbar .toggle{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+    cursor:pointer;user-select:none;padding:4px 8px;border-radius:6px;
+    border:1px solid var(--border);background:var(--surface);
+  }
+  .trip-toolbar .toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .trip-toolbar .toggle.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .trip-toolbar .toggle input{display:none}
+
+  /* (inline add styles moved into category section above) */
+
+  /* Section heading for forms */
+  h3.section{
+    font-family:'Instrument Serif',serif;font-size:18px;color:var(--text);
+    margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border);
+  }
+  h3.section:first-child{margin-top:0}
+
+  .danger-zone{
+    background:var(--red-soft);border:1px solid var(--red);border-radius:10px;
+    padding:12px 14px;margin-top:18px;font-size:13px;color:var(--red);
+  }
+  .danger-zone strong{display:block;margin-bottom:4px;font-size:14px}
+
+  /* Help text near checks */
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;
+    font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);
+    opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:200;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-row">
+      <div class="logo">Pack<span class="accent">liste</span><span class="version" id="versionLabel">v1.2.1</span></div>
+      <button class="cloud-pill off" id="cloudPill" onclick="openCloudDialog()">
+        <span class="dot"></span>
+        <span id="cloudLabel">Lokal</span>
+      </button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="template">Standardliste <span class="count" id="cntTemplate">0</span></button>
+      <button class="tab" data-tab="trips">Reisen <span class="count" id="cntTrips">0</span></button>
+      <button class="tab" data-tab="archive">Archiv <span class="count" id="cntArchive">0</span></button>
+    </nav>
+  </header>
+
+  <main id="main"></main>
+</div>
+
+<!-- ── DIALOG: New / edit trip ─────────────────────────────── -->
+<div class="dialog-backdrop" id="dlgTrip">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2 id="dlgTripTitle">Neue Reise</h2>
+      <button class="dialog-close" onclick="closeDialog('dlgTrip')">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="field">
+        <label>Reisename</label>
+        <input type="text" id="tripName" placeholder="z.B. Rom Mai 2026, Wacken 2026 …">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Von (optional)</label>
+          <input type="date" id="tripFrom">
+        </div>
+        <div class="field">
+          <label>Bis (optional)</label>
+          <input type="date" id="tripTo">
+        </div>
+      </div>
+      <div class="field" id="copyFromField">
+        <label>Artikel übernehmen aus</label>
+        <select id="tripCopyFrom">
+          <option value="template">Standardliste</option>
+        </select>
+        <div class="hint">Die Artikel werden in die Reise kopiert. Spätere Änderungen dort wirken nicht auf die Quelle zurück.</div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn danger" onclick="deleteTrip()" id="tripDeleteBtn" style="margin-right:auto;display:none">Reise löschen</button>
+      <button class="btn" onclick="closeDialog('dlgTrip')">Abbrechen</button>
+      <button class="btn primary" onclick="saveTrip()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DIALOG: Item edit (note) ────────────────────────────── -->
+<div class="dialog-backdrop" id="dlgItem">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2>Artikel bearbeiten</h2>
+      <button class="dialog-close" onclick="closeDialog('dlgItem')">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="itemName">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Menge</label>
+          <input type="number" id="itemQty" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Kategorie</label>
+          <select id="itemCategory"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Notiz (z.B. „falls Regen")</label>
+        <input type="text" id="itemNote" placeholder="optional">
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn danger" onclick="deleteItem()" id="itemDeleteBtn" style="margin-right:auto">Löschen</button>
+      <button class="btn" onclick="closeDialog('dlgItem')">Abbrechen</button>
+      <button class="btn primary" onclick="saveItem()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DIALOG: Cloud sync setup ────────────────────────────── -->
+<div class="dialog-backdrop" id="dlgCloud">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2>Cloud-Synchronisation</h2>
+      <button class="dialog-close" onclick="closeDialog('dlgCloud')">×</button>
+    </div>
+    <div class="dialog-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+        Trage Bin&nbsp;ID und Master&nbsp;Key deines JSONBin-Accounts ein. Die Daten werden nur in diesem
+        Browser gespeichert, nicht im App-Code. Pro Endgerät einmalig.
+      </p>
+      <div class="field">
+        <label>Bin ID</label>
+        <input type="text" id="cloudBin" placeholder="z.B. 6a087414250b1311c35c408b" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Master Key</label>
+        <input type="text" id="cloudKey" placeholder="$2a$10$…" autocomplete="off">
+      </div>
+      <div class="hint" style="color:var(--muted);font-size:12px;margin-top:6px">
+        Tipp: Beim allerersten Einrichten in JSONBin den Bin mit Inhalt
+        <code style="background:var(--surface-soft);padding:1px 5px;border-radius:4px">{"packing":{}}</code>
+        anlegen.
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn danger" onclick="disconnectCloud()" id="cloudDisconnectBtn" style="margin-right:auto">Trennen</button>
+      <button class="btn" onclick="closeDialog('dlgCloud')">Abbrechen</button>
+      <button class="btn primary" onclick="connectCloud()">Verbinden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DIALOG: Manage categories ───────────────────────────── -->
+<div class="dialog-backdrop" id="dlgCats">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2>Kategorien verwalten</h2>
+      <button class="dialog-close" onclick="closeDialog('dlgCats')">×</button>
+    </div>
+    <div class="dialog-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">
+        Kategorien gelten für die Standardliste und alle Reisen. Bereits zugeordnete Artikel werden bei
+        Umbenennung automatisch nachgezogen.
+      </p>
+      <div id="catList"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input type="text" id="newCatName" placeholder="Neue Kategorie">
+        <button class="btn primary" onclick="addCategory()">Hinzufügen</button>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn primary" onclick="closeDialog('dlgCats')">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   ZUSTAND
+   ════════════════════════════════════════════════════════════ */
+const VERSION = 'v1.2.1';
+const STORAGE_KEY = 'packliste_state_v1';
+const CRED_KEY = 'packliste_cloud_cred';
+
+const DEFAULT_CATEGORIES = ['Kleidung','Hygiene','Elektronik','Dokumente','Medikamente','Sonstiges'];
+
+// State shape:
+// { categories: [...], template: { items:[{id,name,qty,cat,note}] },
+//   trips: [{id,name,from,to,archived,createdAt,items:[{id,name,qty,cat,note,packed}]}] }
+let state = {
+  categories: [...DEFAULT_CATEGORIES],
+  template: { items: [] },
+  trips: []
+};
+let activeTab = 'template';
+let activeTripId = null;     // wenn eine Reise geöffnet ist
+let editingItem = null;      // {scope:'template'|tripId, id}
+let editingTripId = null;    // für Reise-Dialog
+let collapsedCats = new Set(JSON.parse(localStorage.getItem('packliste_collapsed')||'[]'));
+
+/* ════════════════════════════════════════════════════════════
+   PERSISTENZ – lokal
+   ════════════════════════════════════════════════════════════ */
+function loadLocal(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      // Migration / Defaults
+      state.categories = Array.isArray(parsed.categories) && parsed.categories.length
+        ? parsed.categories : [...DEFAULT_CATEGORIES];
+      state.template = parsed.template && Array.isArray(parsed.template.items)
+        ? parsed.template : { items: [] };
+      state.trips = Array.isArray(parsed.trips) ? parsed.trips : [];
+    }
+  }catch(e){ console.warn('load error',e); }
+}
+function saveLocal(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+/* ════════════════════════════════════════════════════════════
+   CLOUD-SYNC (JSONBin) – Schlüssel pro Gerät, nie im Code
+   ════════════════════════════════════════════════════════════ */
+let JSONBIN_ID=null, JSONBIN_KEY=null, JSONBIN_URL=null;
+let cloudEnabled=false, cloudStatus='idle';
+let saveDebounce=null;
+
+function loadCloudCreds(){
+  try{
+    const c = JSON.parse(localStorage.getItem(CRED_KEY)||'null');
+    if(c && c.id && c.key){
+      JSONBIN_ID = c.id; JSONBIN_KEY = c.key;
+      JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+      cloudEnabled = true;
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function saveCloudCreds(id,key){
+  localStorage.setItem(CRED_KEY, JSON.stringify({id:id.trim(), key:key.trim()}));
+  loadCloudCreds();
+}
+function clearCloudCreds(){
+  localStorage.removeItem(CRED_KEY);
+  JSONBIN_ID=JSONBIN_KEY=JSONBIN_URL=null;
+  cloudEnabled=false;
+}
+
+async function loadCloud(){
+  if(!cloudEnabled) return null;
+  setCloudStatus('busy','Lade …');
+  try{
+    const res = await fetch(`${JSONBIN_URL}/latest`, {
+      headers:{ 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta':'false' }
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    // Erwarte Form { packing: { categories, template, trips } }
+    // Akzeptiere auch direkt { categories, template, trips }
+    const payload = data.packing || data;
+    if(payload && (payload.template || payload.trips)){
+      setCloudStatus('ok','Synchronisiert');
+      return payload;
+    }
+    setCloudStatus('ok','Synchronisiert');
+    return null;
+  }catch(e){
+    console.warn('cloud load',e);
+    setCloudStatus('err','Fehler');
+    return null;
+  }
+}
+
+async function saveCloud(){
+  if(!cloudEnabled) return;
+  clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(async()=>{
+    setCloudStatus('busy','Speichere …');
+    try{
+      const res = await fetch(JSONBIN_URL, {
+        method:'PUT',
+        headers:{ 'Content-Type':'application/json', 'X-Master-Key': JSONBIN_KEY },
+        body: JSON.stringify({ packing: state })
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      setCloudStatus('ok','Synchronisiert');
+    }catch(e){
+      console.warn('cloud save',e);
+      setCloudStatus('err','Fehler');
+    }
+  }, 600);
+}
+
+function setCloudStatus(s,label){
+  cloudStatus = s;
+  const pill = document.getElementById('cloudPill');
+  pill.classList.remove('ok','busy','err','off');
+  pill.classList.add(s);
+  document.getElementById('cloudLabel').textContent = label;
+}
+
+function openCloudDialog(){
+  const c = JSON.parse(localStorage.getItem(CRED_KEY)||'null');
+  document.getElementById('cloudBin').value = c?.id || '';
+  document.getElementById('cloudKey').value = c?.key || '';
+  document.getElementById('cloudDisconnectBtn').style.display = cloudEnabled ? '' : 'none';
+  openDialog('dlgCloud');
+}
+async function connectCloud(){
+  const id = document.getElementById('cloudBin').value.trim();
+  const key = document.getElementById('cloudKey').value.trim();
+  if(!id || !key){ toast('Bitte beide Felder ausfüllen.'); return; }
+  saveCloudCreds(id,key);
+  closeDialog('dlgCloud');
+  // Versuche Cloud zu laden – wenn dort schon Daten sind, übernehmen wir sie
+  const cloud = await loadCloud();
+  if(cloud){
+    if(confirm('In der Cloud liegen bereits Daten. Sollen die Cloud-Daten in dieses Gerät übernommen werden? (OK = Cloud → Gerät, Abbrechen = Gerät → Cloud)')){
+      applyState(cloud); saveLocal(); render();
+      toast('Cloud-Daten geladen.');
+    } else {
+      saveCloud();
+      toast('Lokale Daten in die Cloud hochgeladen.');
+    }
+  } else {
+    // Cloud leer oder Fehler – falls vorhandene lokale Daten, hochladen
+    saveCloud();
+    toast('Verbunden. Daten werden synchronisiert.');
+  }
+}
+function disconnectCloud(){
+  clearCloudCreds();
+  closeDialog('dlgCloud');
+  setCloudStatus('off','Lokal');
+  toast('Cloud-Verbindung getrennt.');
+}
+function applyState(payload){
+  state.categories = Array.isArray(payload.categories) && payload.categories.length
+    ? payload.categories : [...DEFAULT_CATEGORIES];
+  state.template = payload.template && Array.isArray(payload.template.items)
+    ? payload.template : { items: [] };
+  state.trips = Array.isArray(payload.trips) ? payload.trips : [];
+}
+
+/* persist nach jeder Mutation */
+function persist(){
+  saveLocal();
+  saveCloud();
+}
+
+/* ════════════════════════════════════════════════════════════
+   HELPERS
+   ════════════════════════════════════════════════════════════ */
+function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
+function fmtDate(s){
+  if(!s) return '';
+  const d = new Date(s);
+  return d.toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'});
+}
+function tripDateRange(t){
+  if(!t.from && !t.to) return '';
+  if(t.from && t.to) return `${fmtDate(t.from)} – ${fmtDate(t.to)}`;
+  return fmtDate(t.from || t.to);
+}
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1900);
+}
+function openDialog(id){ document.getElementById(id).classList.add('open'); }
+function closeDialog(id){ document.getElementById(id).classList.remove('open'); }
+function getScopeItems(scope){
+  if(scope==='template') return state.template.items;
+  const trip = state.trips.find(t=>t.id===scope);
+  return trip ? trip.items : [];
+}
+
+/* ════════════════════════════════════════════════════════════
+   RENDER – TABS
+   ════════════════════════════════════════════════════════════ */
+function render(){
+  // counters
+  document.getElementById('cntTemplate').textContent = state.template.items.length;
+  const active = state.trips.filter(t=>!t.archived);
+  const archived = state.trips.filter(t=>t.archived);
+  document.getElementById('cntTrips').textContent = active.length;
+  document.getElementById('cntArchive').textContent = archived.length;
+
+  // tab styling
+  document.querySelectorAll('.tab').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab===activeTab);
+  });
+
+  const main = document.getElementById('main');
+  if(activeTripId){
+    main.innerHTML = renderTripView(activeTripId);
+  } else if(activeTab==='template'){
+    main.innerHTML = renderTemplate();
+  } else if(activeTab==='trips'){
+    main.innerHTML = renderTripsGrid(active, false);
+  } else {
+    main.innerHTML = renderTripsGrid(archived, true);
+  }
+}
+
+/* ── Standardliste ─────────────────────────────────────────── */
+function renderTemplate(){
+  const t = state.template;
+  let html = `
+    <div class="toolbar">
+      <div class="grow"></div>
+      <button class="btn" onclick="openCategoriesDialog()">⚙ Kategorien</button>
+      <button class="btn" onclick="exportJson()">↓ Export</button>
+      <button class="btn" onclick="importJson()">↑ Import</button>
+    </div>
+  `;
+  if(!t.items.length){
+    html += `
+      <div class="empty">
+        <h3>Standardliste ist leer</h3>
+        <p>Lege hier deine immer-wiederkehrenden Artikel an. Bei jeder neuen Reise kopierst du diese Liste mit einem Klick.</p>
+      </div>
+    `;
+  }
+  html += renderItemsByCategory('template', t.items, /*withChecks*/ false);
+  return html;
+}
+
+/* ── Reisen-Übersicht ──────────────────────────────────────── */
+function renderTripsGrid(trips, archived){
+  let html = `
+    <div class="toolbar">
+      <div class="grow"></div>
+      ${archived ? '' : '<button class="btn primary" onclick="newTrip()">+ Neue Reise</button>'}
+    </div>
+  `;
+  if(!trips.length){
+    html += `
+      <div class="empty">
+        <h3>${archived ? 'Noch keine archivierten Reisen' : 'Noch keine Reisen'}</h3>
+        <p>${archived
+          ? 'Wenn du eine Reise abschließt, landet sie hier und bleibt mit allen eingepackten Mengen erhalten.'
+          : 'Lege deine erste Reise an. Du kannst dabei die Artikel aus der Standardliste übernehmen.'}</p>
+        ${archived ? '' : '<button class="btn primary" onclick="newTrip()">+ Neue Reise</button>'}
+      </div>
+    `;
+    return html;
+  }
+  // sort: most recent first (createdAt desc, or by from date if present)
+  const sorted = [...trips].sort((a,b)=>{
+    const av = a.from || a.createdAt || '';
+    const bv = b.from || b.createdAt || '';
+    return bv.localeCompare(av);
+  });
+  html += `<div class="trips-grid">`;
+  for(const trip of sorted){
+    const total = trip.items.length;
+    const packed = trip.items.filter(i=>i.packed).length;
+    const pct = total ? Math.round(packed/total*100) : 0;
+    html += `
+      <div class="trip-card ${archived?'archived':''}" onclick="openTrip('${trip.id}')">
+        <div class="trip-name">${escapeHtml(trip.name)}</div>
+        <div class="trip-dates">${tripDateRange(trip)||'<span style="opacity:0.6">Kein Datum</span>'}</div>
+        <div class="trip-progress"><div class="trip-progress-bar" style="width:${pct}%"></div></div>
+        <div class="trip-stats">
+          <span><strong>${packed}</strong> / ${total} eingepackt</span>
+          <span>${pct}%</span>
+        </div>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  return html;
+}
+
+/* ── Aktive Reise (Detailansicht) ──────────────────────────── */
+function renderTripView(tripId){
+  const trip = state.trips.find(t=>t.id===tripId);
+  if(!trip){ activeTripId=null; return renderTripsGrid(state.trips.filter(t=>!t.archived), false); }
+  const total = trip.items.length;
+  const packed = trip.items.filter(i=>i.packed).length;
+  const open = total - packed;
+  const pct = total ? Math.round(packed/total*100) : 0;
+  const dates = tripDateRange(trip);
+  const hidePacked = localStorage.getItem('packliste_hidepacked_'+tripId)==='1';
+  let html = `
+    <div class="trip-header">
+      <div class="trip-header-info" style="flex:1;min-width:0">
+        <button class="btn small" onclick="closeTrip()" style="margin-bottom:6px;padding:3px 8px;font-size:11px">← Zurück</button>
+        <h2>${escapeHtml(trip.name)}</h2>
+        <div class="sub">
+          ${dates||'Kein Datum'} ·
+          <strong>${packed}</strong>/${total} eingepackt · ${pct}%
+          ${open>0 ? ` · <span style="color:var(--amber)">${open} offen</span>`:' · <span style="color:var(--green)">fertig ✓</span>'}
+        </div>
+        <div class="progress-large"><div class="progress-large-bar" style="width:${pct}%"></div></div>
+      </div>
+      <div class="trip-header-actions">
+        <button class="btn small" onclick="editTrip('${trip.id}')" title="Reise bearbeiten">✎</button>
+        <button class="btn small" onclick="copyTemplateInto('${trip.id}')" title="Standardliste übernehmen">+ Vorlage</button>
+        ${trip.archived
+          ? `<button class="btn small" onclick="unarchiveTrip('${trip.id}')">↺ Aktivieren</button>`
+          : `<button class="btn small primary" onclick="archiveTrip('${trip.id}')">✓ Abschließen</button>`
+        }
+      </div>
+    </div>
+    <div class="trip-toolbar">
+      <label class="toggle ${hidePacked?'active':''}" onclick="toggleHidePacked('${trip.id}')">
+        ${hidePacked ? '☑' : '☐'} Eingepackte ausblenden
+      </label>
+    </div>
+  `;
+  if(!trip.items.length){
+    html += `
+      <div class="empty">
+        <h3>Diese Reise hat noch keine Artikel</h3>
+        <p>Übernimm die Standardliste oder lege Artikel direkt an.</p>
+        <button class="btn primary" onclick="copyTemplateInto('${trip.id}')">+ Standardliste übernehmen</button>
+      </div>
+    `;
+  }
+  html += renderItemsByCategory(trip.id, trip.items, /*withChecks*/ true, /*hidePacked*/ hidePacked);
+  return html;
+}
+
+function toggleHidePacked(tripId){
+  const key = 'packliste_hidepacked_'+tripId;
+  if(localStorage.getItem(key)==='1') localStorage.removeItem(key);
+  else localStorage.setItem(key,'1');
+  render();
+}
+
+/* ── Kategorien-Liste mit Artikeln ─────────────────────────── */
+function renderItemsByCategory(scope, items, withChecks, hidePacked=false){
+  // Group by category
+  const groups = {};
+  for(const c of state.categories) groups[c] = [];
+  for(const it of items){
+    const cat = state.categories.includes(it.cat) ? it.cat : 'Sonstiges';
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(it);
+  }
+  let html = '';
+  for(const cat of state.categories){
+    let list = groups[cat] || [];
+    const total = list.length;
+    const done = withChecks ? list.filter(i=>i.packed).length : 0;
+    const pct = total ? Math.round(done/total*100) : 0;
+
+    // sort: unpacked first, packed last; preserves stable order within each group
+    if(withChecks){
+      const open = list.filter(i=>!i.packed);
+      const closed = list.filter(i=>i.packed);
+      list = hidePacked ? open : [...open, ...closed];
+    }
+
+    const collapsed = collapsedCats.has(scope+'::'+cat);
+    const counterText = withChecks
+      ? (total ? `${done}/${total}` : '0')
+      : String(total||0);
+    const counterCls = withChecks && total && done===total ? 'cat-counter done' : 'cat-counter';
+    const addId = 'add_'+scope+'_'+cat.replace(/[^a-z0-9]/gi,'_');
+    const progress = withChecks ? pct : 0;
+
+    html += `
+      <section class="category ${collapsed?'collapsed':''}" data-scope="${escapeHtml(scope)}" data-cat="${escapeHtml(cat)}" style="--cat-progress:${progress}%">
+        <header class="cat-head js-cat-head">
+          <div class="cat-title">
+            <span class="cat-chevron"></span>
+            ${escapeHtml(cat)}
+          </div>
+          <span class="${counterCls}">${counterText}</span>
+        </header>
+        <div class="cat-body">
+          ${list.length ? list.map(it => renderItem(scope, it, withChecks)).join('') : ''}
+          <div class="cat-foot">
+            <button type="button" class="cat-add-btn js-toggle-add" data-target="${addId}">+ Artikel hinzufügen</button>
+            <form class="cat-add-form js-add-form" id="${addId}" data-scope="${escapeHtml(scope)}" data-cat="${escapeHtml(cat)}">
+              ${withChecks ? '<input type="number" min="1" value="1" name="qty" title="Menge">' : ''}
+              <input type="text" name="name" placeholder="Artikelname" required>
+              <input type="text" name="note" placeholder="Notiz (optional)">
+              <button class="btn primary small" type="submit">Hinzufügen</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+  return html;
+}
+
+function renderItem(scope, it, withChecks){
+  const checked = it.packed ? 'checked' : '';
+  const checkEl = withChecks
+    ? `<div class="check ${checked}" onclick="togglePacked('${scope}','${it.id}')"></div>`
+    : `<div class="check disabled"></div>`;
+  const qtyEl = withChecks
+    ? `<div class="qty-badge js-qty-badge" data-scope="${escapeHtml(scope)}" data-id="${it.id}" title="Klick: Menge ändern">${it.qty}</div>`
+    : '';
+  return `
+    <div class="item ${it.packed?'packed':''} ${it.note?'has-note':''}" data-id="${it.id}">
+      ${checkEl}
+      ${qtyEl}
+      <div class="item-name js-item-name" data-scope="${escapeHtml(scope)}" data-id="${it.id}">${escapeHtml(it.name)}</div>
+      ${it.note ? `<div class="item-note js-item-name" data-scope="${escapeHtml(scope)}" data-id="${it.id}" title="${escapeHtml(it.note)}">${escapeHtml(it.note)}</div>` : ''}
+      <div class="item-actions">
+        <button onclick="openItemDialog('${scope}','${it.id}')" title="Bearbeiten">✎</button>
+        <button class="del" onclick="quickDelete('${scope}','${it.id}')" title="Löschen">×</button>
+      </div>
+    </div>
+  `;
+}
+
+/* (renderInlineAdd entfernt – Add-Form ist jetzt direkt im Kategorie-Template) */
+
+/* ════════════════════════════════════════════════════════════
+   AKTIONEN – Items
+   ════════════════════════════════════════════════════════════ */
+function quickAdd(scope, cat, form){
+  const fd = new FormData(form);
+  const name = (fd.get('name')||'').trim();
+  const qty = parseInt(fd.get('qty')||'1',10) || 1;
+  const note = (fd.get('note')||'').trim();
+  if(!name) return;
+  const items = getScopeItems(scope);
+  const dupe = items.find(i => i.name.toLowerCase()===name.toLowerCase() && i.cat===cat);
+  if(dupe){
+    if(!confirm(`„${name}" gibt es in „${cat}" schon. Trotzdem hinzufügen?`)) return;
+  }
+  items.push({ id: uid(), name, qty, cat, note, packed: false });
+  persist();
+  render();
+  // Toast statt offenbleibendes Formular – schneller Workflow
+  toast(`„${name}" hinzugefügt`);
+}
+
+function setQty(scope,id,val){
+  const items = getScopeItems(scope);
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  it.qty = Math.max(0, parseInt(val,10) || 0);
+  persist();
+  render();
+}
+
+function togglePacked(scope,id){
+  const items = getScopeItems(scope);
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  it.packed = !it.packed;
+  persist();
+  render();
+}
+
+function quickDelete(scope,id){
+  const items = getScopeItems(scope);
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  if(!confirm(`„${it.name}" löschen?`)) return;
+  const idx = items.indexOf(it);
+  items.splice(idx,1);
+  persist();
+  render();
+}
+
+function openItemDialog(scope,id){
+  const items = getScopeItems(scope);
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  editingItem = { scope, id };
+  document.getElementById('itemName').value = it.name;
+  document.getElementById('itemQty').value = it.qty;
+  document.getElementById('itemNote').value = it.note || '';
+  // Mengenfeld nur in Reisen anzeigen, nicht in der Standardliste
+  const qtyField = document.getElementById('itemQty').closest('.field');
+  if(qtyField) qtyField.style.display = (scope==='template') ? 'none' : '';
+  // category select
+  const sel = document.getElementById('itemCategory');
+  sel.innerHTML = state.categories.map(c=>`<option value="${escapeHtml(c)}" ${c===it.cat?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  openDialog('dlgItem');
+  setTimeout(()=>document.getElementById('itemName').focus(),50);
+}
+function saveItem(){
+  if(!editingItem) return;
+  const items = getScopeItems(editingItem.scope);
+  const it = items.find(i=>i.id===editingItem.id);
+  if(!it) return;
+  const newName = document.getElementById('itemName').value.trim();
+  const newQty = Math.max(0, parseInt(document.getElementById('itemQty').value,10)||0);
+  const newCat = document.getElementById('itemCategory').value;
+  const newNote = document.getElementById('itemNote').value.trim();
+  if(!newName){ toast('Name darf nicht leer sein.'); return; }
+  // Dupe check (excluding self) in same category
+  const dupe = items.find(i => i!==it && i.name.toLowerCase()===newName.toLowerCase() && i.cat===newCat);
+  if(dupe){
+    if(!confirm(`„${newName}" gibt es in „${newCat}" schon. Trotzdem speichern?`)) return;
+  }
+  it.name = newName; it.qty = newQty; it.cat = newCat; it.note = newNote;
+  editingItem = null;
+  closeDialog('dlgItem');
+  persist(); render();
+}
+function deleteItem(){
+  if(!editingItem) return;
+  const items = getScopeItems(editingItem.scope);
+  const it = items.find(i=>i.id===editingItem.id);
+  if(!it) return;
+  if(!confirm(`„${it.name}" wirklich löschen?`)) return;
+  items.splice(items.indexOf(it),1);
+  editingItem = null;
+  closeDialog('dlgItem');
+  persist(); render();
+}
+
+/* ── Kategorien ────────────────────────────────────────────── */
+function toggleCat(scope,cat){
+  const key = scope+'::'+cat;
+  if(collapsedCats.has(key)) collapsedCats.delete(key);
+  else collapsedCats.add(key);
+  localStorage.setItem('packliste_collapsed', JSON.stringify([...collapsedCats]));
+  render();
+}
+function openCategoriesDialog(){
+  renderCatList();
+  openDialog('dlgCats');
+}
+function renderCatList(){
+  const list = document.getElementById('catList');
+  list.innerHTML = state.categories.map((c,i)=>`
+    <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <input type="text" value="${escapeHtml(c)}" data-idx="${i}" onchange="renameCategory(${i},this.value)" style="flex:1">
+      <button class="btn small" onclick="moveCategory(${i},-1)" ${i===0?'disabled':''}>↑</button>
+      <button class="btn small" onclick="moveCategory(${i},1)" ${i===state.categories.length-1?'disabled':''}>↓</button>
+      <button class="btn small danger" onclick="deleteCategory(${i})">×</button>
+    </div>
+  `).join('');
+}
+function addCategory(){
+  const input = document.getElementById('newCatName');
+  const name = input.value.trim();
+  if(!name) return;
+  if(state.categories.includes(name)){ toast('Kategorie existiert bereits.'); return; }
+  state.categories.push(name);
+  input.value='';
+  persist(); renderCatList(); render();
+}
+function renameCategory(idx,newName){
+  newName = newName.trim();
+  if(!newName) return;
+  const old = state.categories[idx];
+  if(old===newName) return;
+  if(state.categories.includes(newName)){ toast('Existiert schon.'); renderCatList(); return; }
+  state.categories[idx] = newName;
+  // rename in all items
+  for(const it of state.template.items) if(it.cat===old) it.cat=newName;
+  for(const t of state.trips) for(const it of t.items) if(it.cat===old) it.cat=newName;
+  persist(); renderCatList(); render();
+}
+function moveCategory(idx,dir){
+  const j = idx+dir;
+  if(j<0||j>=state.categories.length) return;
+  [state.categories[idx],state.categories[j]] = [state.categories[j],state.categories[idx]];
+  persist(); renderCatList(); render();
+}
+function deleteCategory(idx){
+  const cat = state.categories[idx];
+  const usedInTpl = state.template.items.filter(i=>i.cat===cat).length;
+  const usedInTrips = state.trips.reduce((s,t)=>s+t.items.filter(i=>i.cat===cat).length,0);
+  if(usedInTpl+usedInTrips>0){
+    if(!confirm(`„${cat}" enthält noch ${usedInTpl+usedInTrips} Artikel. Diese werden nach „Sonstiges" verschoben. Fortfahren?`)) return;
+    if(!state.categories.includes('Sonstiges')) state.categories.push('Sonstiges');
+    for(const it of state.template.items) if(it.cat===cat) it.cat='Sonstiges';
+    for(const t of state.trips) for(const it of t.items) if(it.cat===cat) it.cat='Sonstiges';
+  }
+  state.categories.splice(idx,1);
+  persist(); renderCatList(); render();
+}
+
+/* ════════════════════════════════════════════════════════════
+   AKTIONEN – Reisen
+   ════════════════════════════════════════════════════════════ */
+function newTrip(){
+  editingTripId = null;
+  document.getElementById('dlgTripTitle').textContent = 'Neue Reise';
+  document.getElementById('tripName').value = '';
+  document.getElementById('tripFrom').value = '';
+  document.getElementById('tripTo').value = '';
+  document.getElementById('tripDeleteBtn').style.display = 'none';
+  const sel = document.getElementById('tripCopyFrom');
+  sel.innerHTML = `<option value="template">Standardliste (${state.template.items.length} Artikel)</option>`
+    + state.trips.map(t=>`<option value="${t.id}">${escapeHtml(t.name)} (${t.items.length} Artikel)</option>`).join('')
+    + `<option value="">— Leer starten —</option>`;
+  document.getElementById('copyFromField').style.display = '';
+  openDialog('dlgTrip');
+  setTimeout(()=>document.getElementById('tripName').focus(),50);
+}
+function editTrip(id){
+  const t = state.trips.find(x=>x.id===id);
+  if(!t) return;
+  editingTripId = id;
+  document.getElementById('dlgTripTitle').textContent = 'Reise bearbeiten';
+  document.getElementById('tripName').value = t.name;
+  document.getElementById('tripFrom').value = t.from || '';
+  document.getElementById('tripTo').value = t.to || '';
+  document.getElementById('copyFromField').style.display = 'none';
+  document.getElementById('tripDeleteBtn').style.display = '';
+  openDialog('dlgTrip');
+}
+function saveTrip(){
+  const name = document.getElementById('tripName').value.trim();
+  const from = document.getElementById('tripFrom').value || '';
+  const to = document.getElementById('tripTo').value || '';
+  if(!name){ toast('Bitte einen Reisenamen eingeben.'); return; }
+  if(editingTripId){
+    const t = state.trips.find(x=>x.id===editingTripId);
+    if(t){ t.name=name; t.from=from; t.to=to; }
+  } else {
+    const copyFrom = document.getElementById('tripCopyFrom').value;
+    let items = [];
+    if(copyFrom==='template'){
+      // Standardliste hat keine Mengenangabe — starte alle Artikel mit Menge 1
+      items = state.template.items.map(i => ({...i, id:uid(), qty:1, packed:false}));
+    } else if(copyFrom){
+      // Bei Kopie aus alter Reise die Mengen mit übernehmen (oft hilfreich: "wie letztes Jahr")
+      const src = state.trips.find(t=>t.id===copyFrom);
+      if(src) items = src.items.map(i => ({...i, id:uid(), packed:false}));
+    }
+    const newTrip = { id: uid(), name, from, to, archived:false, createdAt:new Date().toISOString(), items };
+    state.trips.push(newTrip);
+    activeTab = 'trips';
+    activeTripId = newTrip.id;
+  }
+  editingTripId = null;
+  closeDialog('dlgTrip');
+  persist(); render();
+}
+function openTrip(id){
+  activeTripId = id;
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeTrip(){
+  activeTripId = null;
+  render();
+}
+function copyTemplateInto(tripId){
+  const trip = state.trips.find(t=>t.id===tripId);
+  if(!trip) return;
+  if(!state.template.items.length){ toast('Standardliste ist leer.'); return; }
+  let added = 0, skipped = 0;
+  for(const src of state.template.items){
+    const dupe = trip.items.find(i => i.name.toLowerCase()===src.name.toLowerCase() && i.cat===src.cat);
+    if(dupe){ skipped++; continue; }
+    trip.items.push({...src, id:uid(), qty:1, packed:false});
+    added++;
+  }
+  persist(); render();
+  toast(`${added} Artikel übernommen${skipped?`, ${skipped} bereits vorhanden`:''}.`);
+}
+function deleteTrip(){
+  if(!editingTripId) return;
+  const t = state.trips.find(x=>x.id===editingTripId);
+  if(!t) return;
+  const msg = t.items.length
+    ? `„${t.name}" mit ${t.items.length} Artikel${t.items.length===1?'':'n'} unwiderruflich löschen?`
+    : `„${t.name}" löschen?`;
+  if(!confirm(msg)) return;
+  state.trips = state.trips.filter(x=>x.id!==editingTripId);
+  localStorage.removeItem('packliste_hidepacked_'+editingTripId);
+  editingTripId = null;
+  activeTripId = null;
+  closeDialog('dlgTrip');
+  persist(); render();
+  toast(`„${t.name}" gelöscht.`);
+}
+function archiveTrip(id){
+  const t = state.trips.find(x=>x.id===id);
+  if(!t) return;
+  if(!confirm(`„${t.name}" abschließen und ins Archiv verschieben?`)) return;
+  t.archived = true;
+  activeTripId = null;
+  activeTab = 'archive';
+  persist(); render();
+}
+function unarchiveTrip(id){
+  const t = state.trips.find(x=>x.id===id);
+  if(!t) return;
+  t.archived = false;
+  activeTab = 'trips';
+  persist(); render();
+}
+
+/* ── Export / Import als JSON (Sicherung) ──────────────────── */
+function exportJson(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `packliste-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importJson(){
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const data = JSON.parse(r.result);
+        if(!confirm('Bestehende Daten überschreiben? (Empfehlung vorher: Export anlegen)')) return;
+        applyState(data);
+        persist(); render();
+        toast('Import erfolgreich.');
+      }catch(e){ toast('Datei konnte nicht gelesen werden.'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+/* ════════════════════════════════════════════════════════════
+   INIT
+   ════════════════════════════════════════════════════════════ */
+document.getElementById('versionLabel').textContent = VERSION;
+
+// Event-Delegation: Inline-Add-Formulare in den Kategorien
+document.addEventListener('submit', e=>{
+  const form = e.target.closest('form.js-add-form');
+  if(!form) return;
+  e.preventDefault();
+  const scope = form.dataset.scope;
+  const cat = form.dataset.cat;
+  quickAdd(scope, cat, form);
+});
+
+// Klick-Delegation für Kategorie-Kopf, Add-Button und Mengen-Badge
+document.addEventListener('click', e=>{
+  // Mengen-Badge: inline editierbar machen
+  const badge = e.target.closest('.js-qty-badge');
+  if(badge && !badge.classList.contains('editing')){
+    e.stopPropagation();
+    startQtyEdit(badge);
+    return;
+  }
+
+  // Add-Form aufklappen
+  const addBtn = e.target.closest('.js-toggle-add');
+  if(addBtn){
+    e.stopPropagation();
+    const target = document.getElementById(addBtn.dataset.target);
+    if(target){
+      target.classList.toggle('open');
+      if(target.classList.contains('open')){
+        addBtn.style.display = 'none';
+        setTimeout(()=>target.querySelector('[name=name]').focus(), 30);
+      }
+    }
+    return;
+  }
+
+  // Klick auf Item-Name oder Notiz öffnet Bearbeiten-Dialog
+  const nameEl = e.target.closest('.js-item-name');
+  if(nameEl){
+    openItemDialog(nameEl.dataset.scope, nameEl.dataset.id);
+    return;
+  }
+
+  // Klick auf Kategorien-Kopf klappt auf/zu
+  const head = e.target.closest('.js-cat-head');
+  if(head){
+    if(e.target.closest('button,input,select')) return;
+    const section = head.closest('.category');
+    if(section) toggleCat(section.dataset.scope, section.dataset.cat);
+  }
+});
+
+function startQtyEdit(badge){
+  const currentVal = badge.textContent.trim();
+  const scope = badge.dataset.scope;
+  const id = badge.dataset.id;
+  badge.classList.add('editing');
+  badge.innerHTML = `<input type="number" min="0" value="${currentVal}">`;
+  const inp = badge.querySelector('input');
+  inp.focus();
+  inp.select();
+  const finish = ()=>{
+    const val = Math.max(0, parseInt(inp.value,10) || 0);
+    setQty(scope, id, val);
+  };
+  inp.addEventListener('blur', finish);
+  inp.addEventListener('keydown', ev=>{
+    if(ev.key==='Enter'){ ev.preventDefault(); inp.blur(); }
+    if(ev.key==='Escape'){ badge.classList.remove('editing'); badge.textContent = currentVal; }
+  });
+}
+
+document.querySelectorAll('.tab').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    activeTab = b.dataset.tab;
+    activeTripId = null;
+    render();
+  });
+});
+
+// ESC schließt Dialoge
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){
+    document.querySelectorAll('.dialog-backdrop.open').forEach(d=>d.classList.remove('open'));
+  }
+});
+
+// Beim Wechsel zwischen Geräten neu vom Cloud-Bin laden
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && cloudEnabled){
+    (async()=>{
+      const cloud = await loadCloud();
+      if(cloud){
+        applyState(cloud);
+        saveLocal();
+        render();
+      }
+    })();
+  }
+});
+
+// Initial sequence
+(async function init(){
+  loadLocal();
+  if(loadCloudCreds()){
+    setCloudStatus('busy','Lade …');
+    const cloud = await loadCloud();
+    if(cloud){
+      applyState(cloud);
+      saveLocal();
+    } else if(cloudStatus!=='err'){
+      // Cloud leer → erstmaliger Upload der lokalen Daten
+      saveCloud();
+    }
+  } else {
+    setCloudStatus('off','Lokal');
+  }
+  render();
+})();
+
+// PWA Service Worker
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>

@@ -139,8 +139,8 @@
   .row.isZero input.name{color:var(--muted)}
   .add-row{display:flex;align-items:center;gap:6px;width:100%;border:0;background:transparent;color:var(--brand);font:inherit;font-weight:600;font-size:14px;padding:11px 6px 9px;cursor:pointer}
   /* add/type sheet */
-  .seg{display:flex;gap:8px}
-  .seg button{flex:1;border:1px solid var(--line);background:var(--surface-2);border-radius:11px;padding:11px 6px;font:inherit;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
+  .seg{display:flex;gap:8px;flex-wrap:wrap}
+  .seg button{flex:1 1 calc(50% - 4px);border:1px solid var(--line);background:var(--surface-2);border-radius:11px;padding:11px 6px;font:inherit;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
   .seg button.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
   .intv{display:flex;gap:8px;flex-wrap:wrap}
   .intv button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:8px 14px;font:inherit;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
@@ -248,11 +248,13 @@
     <p class="hint" id="addHint">Name, Betrag und wie oft sie anfällt.</p>
     <div class="field"><label>Bezeichnung</label><input id="addName" placeholder="z. B. Versicherung" autocomplete="off" spellcheck="false"></div>
     <div class="field" id="addAmtField"><label>Betrag (€)</label><input id="addAmt" inputmode="decimal" placeholder="0"></div>
+    <div class="field" id="addDailyField" style="display:none"><label>Tagesbudget (€ pro Tag)</label><input id="addDaily" inputmode="decimal" placeholder="z. B. 30"></div>
     <div class="field"><label>Art der Position</label>
       <div class="seg" id="addSeg">
         <button data-kind="monthly" class="on">Monatlich</button>
         <button data-kind="once">Einmalig</button>
-        <button data-kind="turnus">Turnusmäßig</button>
+        <button data-kind="turnus">Turnus</button>
+        <button data-kind="daily">Tagesbudget</button>
       </div>
     </div>
     <div class="field" id="addIntvField" style="display:none"><label>In welchen Monaten fällt sie an?</label>
@@ -294,7 +296,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.1";
+const VERSION="v1.2";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -332,7 +334,7 @@ function tpl(name,amount,kind,months){
 function templateSections(){
   return {
     income:[ tpl("Gehalt / Kontostand",4373), tpl("Diana Miete",1076) ],
-    basics:[ tpl("Grundernährung",920),tpl("Miete + NK",1890),tpl("Heizung",133),tpl("Strom",65),
+    basics:[ {name:"Tagesbudget",kind:"daily",dailyBudget:30},tpl("Miete + NK",1890),tpl("Heizung",133),tpl("Strom",65),
              tpl("GEZ",55,"turnus",[1,4,7,10]),tpl("Riesterrente",50),tpl("Private Rentenversicherung",25),
              tpl("Haftpflicht/Hausrat",12),tpl("Berufsunfähigkeit",50),tpl("Rechtsschutz",100,"turnus",[10]),
              tpl("KFZ Versicherung",0),tpl("ADAC",0,"turnus",[5]),tpl("KV",531),tpl("Switch",0) ],
@@ -425,7 +427,19 @@ const eur=new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximum
 const eur0=new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR",maximumFractionDigits:0});
 function parseAmt(v){ if(typeof v==="number")return v; v=String(v).replace(/\./g,"").replace(",",".").replace(/[^0-9.\-]/g,""); const n=parseFloat(v); return isNaN(n)?0:n; }
 function curMonth(){ return state.months.find(m=>m.id===state.currentId)||state.months[0]; }
-function sumSec(m,key){ return (m.sections[key]||[]).reduce((a,r)=>a+(Number(r.amount)||0),0); }
+// Tagesbudget: zählt im aktuellen Kalendermonat tageweise herunter
+function daysInMonth(id){ const a=absIdx(id); return new Date(Math.floor(a/12), (a%12)+1, 0).getDate(); }
+function realMonthAbs(){ const d=new Date(); return d.getFullYear()*12+d.getMonth(); }
+function dailyRemainingDays(id){
+  const a=absIdx(id), ta=realMonthAbs(), dim=daysInMonth(id);
+  if(a!==ta) return dim;                       // andere Monate: voll verplant
+  return Math.max(0, dim-new Date().getDate()+1); // aktueller Monat: ab heute bis Monatsende
+}
+function effective(m,r){
+  if(r.kind==="daily") return (Number(r.dailyBudget)||0)*dailyRemainingDays(m.id);
+  return Number(r.amount)||0;
+}
+function sumSec(m,key){ return (m.sections[key]||[]).reduce((a,r)=>a+effective(m,r),0); }
 function income(m){ return sumSec(m,"income"); }
 function expenses(m){ return sumSec(m,"basics")+sumSec(m,"savings")+sumSec(m,"luxury"); }
 function saldo(m){ return income(m)-expenses(m); }
@@ -507,16 +521,20 @@ function renderMonth(){
 }
 function rowEl(m,key,i,locked){
   const r=m.sections[key][i];
-  const isZero=(Number(r.amount)||0)===0;
+  const kind=r.kind||"monthly";
+  const isDaily=kind==="daily";
+  const eff=effective(m,r);
+  const isZero=(Number(eff)||0)===0;
   const row=document.createElement("div"); row.className="row"+(isZero?" isZero":"");
   const name=document.createElement("input");
   name.className="name"; name.value=r.name; name.placeholder="Bezeichnung";
-  if(locked) name.disabled=true;
+  if(locked||isDaily) name.disabled=true; // Tagesbudget-Name über Bearbeiten ändern
   name.oninput=()=>{ r.name=name.value; persist(); scheduleSync(); };
   // type chip (tap to change kind)
-  const kind=r.kind||"monthly";
   const chip=document.createElement("button"); chip.className="typechip";
   if(kind==="once"){ chip.classList.add("once"); chip.textContent="1×"; chip.title="Einmalig – tippen zum Ändern"; }
+  else if(kind==="daily"){ chip.classList.add("turnus"); chip.textContent="📅"+(Number(r.dailyBudget)||0);
+    chip.title="Tagesbudget "+eur.format(Number(r.dailyBudget)||0)+"/Tag · noch "+dailyRemainingDays(m.id)+" Tage – tippen zum Ändern"; }
   else if(kind==="turnus"){ chip.classList.add("turnus");
     const ms=Array.isArray(r.months)?r.months:[];
     chip.textContent="⟳"+(ms.length||"");
@@ -525,31 +543,41 @@ function rowEl(m,key,i,locked){
   if(!locked) chip.onclick=()=>openEditType(key,i);
   // amount
   const amt=document.createElement("input");
-  amt.className="amt num"; amt.inputMode="decimal"; amt.value=r.amount?String(r.amount).replace(".",","):""; amt.placeholder="0";
-  if(locked) amt.disabled=true;
-  amt.onfocus=()=>{ if((Number(r.amount)||0)===0) amt.select(); };
-  amt.oninput=()=>{ r.amount=parseAmt(amt.value);
-    if((r.kind||"monthly")==="turnus" && r.amount>0) r.baseAmount=r.amount;
-    row.classList.toggle("isZero",(Number(r.amount)||0)===0);
-    zero.classList.toggle("done",(Number(r.amount)||0)===0);
-    persist(); renderMonths(); renderHero();
-    row.closest(".section").querySelector(".sum").textContent=eur0.format(sumSec(m,key)); scheduleSync(); };
-  amt.onblur=()=>{ amt.value=r.amount?String(r.amount).replace(".",","):""; };
+  amt.className="amt num"; amt.inputMode="decimal"; amt.placeholder="0";
+  if(isDaily){
+    amt.value=String(Math.round(eff)).replace(".",",");
+    amt.disabled=true; amt.title="Berechnet aus Tagesbudget";
+  } else {
+    amt.value=r.amount?String(r.amount).replace(".",","):"";
+    if(locked) amt.disabled=true;
+    amt.onfocus=()=>{ if((Number(r.amount)||0)===0) amt.select(); };
+    amt.oninput=()=>{ r.amount=parseAmt(amt.value);
+      if((r.kind||"monthly")==="turnus" && r.amount>0) r.baseAmount=r.amount;
+      row.classList.toggle("isZero",(Number(r.amount)||0)===0);
+      if(zero&&zero.classList) zero.classList.toggle("done",(Number(r.amount)||0)===0);
+      persist(); renderMonths(); renderHero();
+      row.closest(".section").querySelector(".sum").textContent=eur0.format(sumSec(m,key)); scheduleSync(); };
+    amt.onblur=()=>{ amt.value=r.amount?String(r.amount).replace(".",","):""; };
+  }
   row.append(name,chip,amt);
+  var zero=null;
   if(!locked){
-    // zero ("nullen") toggle
-    var zero=document.createElement("button"); zero.className="zero"+(isZero?" done":"");
-    zero.textContent="✓"; zero.title="Für diesen Monat erledigt / auf 0 setzen";
-    zero.onclick=()=>{
-      if((Number(r.amount)||0)!==0){ r._prev=r.amount; r.amount=0; }
-      else if(r._prev){ r.amount=r._prev; r._prev=0; }
-      persist(); render(); scheduleSync();
-    };
+    if(!isDaily){
+      // zero ("nullen") toggle – nur für feste Beträge sinnvoll
+      zero=document.createElement("button"); zero.className="zero"+(isZero?" done":"");
+      zero.textContent="✓"; zero.title="Für diesen Monat erledigt / auf 0 setzen";
+      zero.onclick=()=>{
+        if((Number(r.amount)||0)!==0){ r._prev=r.amount; r.amount=0; }
+        else if(r._prev){ r.amount=r._prev; r._prev=0; }
+        persist(); render(); scheduleSync();
+      };
+      row.append(zero);
+    }
     // delete
     const del=document.createElement("button"); del.className="del"; del.textContent="×"; del.title="Position löschen";
     del.onclick=()=>{ if(confirm('"'+(r.name||"Position")+'" löschen?')){ m.sections[key].splice(i,1); persist(); render(); scheduleSync(); } };
-    row.append(zero,del);
-  } else { var zero={classList:{toggle(){}}}; }
+    row.append(del);
+  }
   return row;
 }
 
@@ -568,6 +596,8 @@ const MONTH_SHORT=["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt",
 function setSeg(kind){ addCtx.kind=kind;
   document.querySelectorAll("#addSeg button").forEach(b=>b.classList.toggle("on",b.dataset.kind===kind));
   document.getElementById("addIntvField").style.display=(kind==="turnus")?"":"none";
+  document.getElementById("addDailyField").style.display=(kind==="daily")?"":"none";
+  document.getElementById("addAmtField").style.display=(kind==="daily")?"none":"";
   if(kind==="turnus" && addCtx.months.length===0){ setMonths([(absIdx(curMonth().id)%12)+1]); }
 }
 function renderMonthSel(){
@@ -589,6 +619,7 @@ function openAddSheet(sectionKey){
   document.getElementById("addAmtField").style.display="";
   document.getElementById("addName").value="";
   document.getElementById("addAmt").value="";
+  document.getElementById("addDaily").value="";
   setSeg("monthly"); setMonths([]);
   document.getElementById("addConfirm").textContent="Hinzufügen";
   document.getElementById("addPropagate").style.display="none";
@@ -604,7 +635,7 @@ function openEditType(key,i){
   document.getElementById("addName").value=r.name||"";
   const editVal=(r.kind==="turnus")?(r.baseAmount!=null?r.baseAmount:r.amount):r.amount;
   document.getElementById("addAmt").value=editVal?String(editVal).replace(".",","):"";
-  document.getElementById("addAmtField").style.display="";
+  document.getElementById("addDaily").value=(r.kind==="daily"&&r.dailyBudget)?String(r.dailyBudget).replace(".",","):"";
   setSeg(addCtx.kind); setMonths(addCtx.months);
   document.getElementById("addConfirm").textContent="Übernehmen";
   // propagation block: nur sinnvoll bei wiederkehrenden Positionen und >1 Monat
@@ -623,12 +654,14 @@ function commitEdit(){
   if(!nm){ toast("Bezeichnung eingeben"); return false; }
   if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return false; }
   const amount=parseAmt(document.getElementById("addAmt").value);
+  const daily=parseAmt(document.getElementById("addDaily").value);
   r.name=nm; r.kind=addCtx.kind;
-  if(addCtx.kind==="turnus"){
-    r.months=addCtx.months.slice(); delete r.every; delete r.anchor;
-    r.baseAmount=amount; r.amount=isDue(r,m.id)?amount:0;
+  delete r.months; delete r.every; delete r.anchor; delete r.baseAmount; delete r.dailyBudget;
+  if(addCtx.kind==="daily"){
+    r.dailyBudget=daily; delete r.amount; delete r._prev;
+  } else if(addCtx.kind==="turnus"){
+    r.months=addCtx.months.slice(); r.baseAmount=amount; r.amount=isDue(r,m.id)?amount:0;
   } else {
-    delete r.months; delete r.every; delete r.anchor; delete r.baseAmount;
     r.amount=amount;
   }
   return true;
@@ -648,12 +681,12 @@ function propagate(scope){
     if(m.closed){ locked++; return; }
     const t=(m.sections[key]||[]).find(x=>x.name===name);
     if(!t) return;
-    if((t.kind||"monthly")==="turnus"){
-      t.baseAmount=(r.baseAmount!=null?r.baseAmount:Number(r.amount)||0);
-      t.amount=isDue(t,m.id)?t.baseAmount:0;
-    } else {
-      t.amount=Number(r.amount)||0;
-    }
+    // Konfiguration angleichen (Name, Art, Betrag/Satz)
+    t.name=r.name; t.kind=r.kind;
+    delete t.months; delete t.every; delete t.anchor; delete t.baseAmount; delete t.dailyBudget;
+    if(r.kind==="daily"){ t.dailyBudget=Number(r.dailyBudget)||0; delete t.amount; }
+    else if(r.kind==="turnus"){ t.months=(r.months||[]).slice(); t.baseAmount=r.baseAmount; t.amount=isDue(t,m.id)?t.baseAmount:0; }
+    else { t.amount=Number(r.amount)||0; }
     count++;
   });
   persist(); render(); scheduleSync(); closeSheets();
@@ -666,11 +699,16 @@ function confirmAdd(){
     persist(); render(); scheduleSync(); closeSheets(); return;
   }
   const name=document.getElementById("addName").value.trim();
-  const amount=parseAmt(document.getElementById("addAmt").value);
   if(!name){ toast("Bezeichnung eingeben"); return; }
   if(addCtx.kind==="turnus" && addCtx.months.length===0){ toast("Mindestens einen Monat wählen"); return; }
-  const r={name,kind:addCtx.kind,amount};
-  if(addCtx.kind==="turnus"){ r.months=addCtx.months.slice(); r.baseAmount=amount; }
+  let r;
+  if(addCtx.kind==="daily"){
+    r={name,kind:"daily",dailyBudget:parseAmt(document.getElementById("addDaily").value)};
+  } else {
+    const amount=parseAmt(document.getElementById("addAmt").value);
+    r={name,kind:addCtx.kind,amount};
+    if(addCtx.kind==="turnus"){ r.months=addCtx.months.slice(); r.baseAmount=amount; }
+  }
   m.sections[addCtx.sectionKey].push(r);
   persist(); render(); scheduleSync(); closeSheets();
   toast(addCtx.kind==="once"?"Einmalige Position hinzugefügt":"Position hinzugefügt");
@@ -713,7 +751,9 @@ function buildCarry(prev,newId){
       const kind=r.kind||"monthly";
       if(kind==="once") return; // einmalige Positionen nicht übernehmen
       const nr={name:r.name,kind};
-      if(kind==="turnus"){
+      if(kind==="daily"){
+        nr.dailyBudget=Number(r.dailyBudget)||0;
+      } else if(kind==="turnus"){
         if(Array.isArray(r.months)) nr.months=r.months.slice();
         if(r.every) nr.every=r.every; if(r.anchor) nr.anchor=r.anchor;
         nr.baseAmount=(r.baseAmount!=null?r.baseAmount:Number(r.amount)||0);

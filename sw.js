@@ -1,5 +1,5 @@
 // Service Worker – Finanzen PWA
-const CACHE = "finanzen-v8";
+const CACHE = "finanzen-v9";
 const ASSETS = [
   "./",
   "./finanzen.html",
@@ -21,8 +21,8 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  // Never cache JSONBin API calls – always go to network so sync stays live.
-  if (url.hostname.includes("jsonbin.io")) return;
+  // Sync-Backends nie cachen/abfangen – immer direkt ins Netz.
+  if (url.hostname.includes("jsonbin.io") || url.hostname.includes("workers.dev")) return;
   // App shell: cache-first with network update.
   e.respondWith(
     caches.match(e.request).then(cached => {

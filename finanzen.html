@@ -231,9 +231,8 @@
   <div class="sheet">
     <div class="grab"></div>
     <h2>Cloud-Synchronisation</h2>
-    <p class="hint">Damit Smartphone und PC denselben Stand zeigen. Bin-ID und Master-Key bekommst du bei jsonbin.io. Sie werden nur auf diesem Gerät gespeichert – nicht im App-Code.</p>
-    <div class="field"><label>JSONBin Bin-ID</label><input id="binId" placeholder="z. B. 663f…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-    <div class="field"><label>Master-Key</label><input id="binKey" placeholder="$2a$10$…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <p class="hint">Damit Smartphone und PC denselben Stand zeigen. Das gemeinsame Worker-Secret wird nur auf diesem Gerät gespeichert – nicht im App-Code.</p>
+    <div class="field"><label>Worker Secret</label><input id="workerSecret" type="password" placeholder="gemeinsames Secret" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
     <button class="btn primary" onclick="connectSync()">Verbinden</button>
     <div class="btn-row" style="margin-top:10px">
       <button class="btn ghost" onclick="manualPull()">Cloud laden</button>
@@ -298,7 +297,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.3";
+const VERSION="v1.4";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -397,7 +396,7 @@ function normalizeAdopted(){
 }
 
 let state, view="month";
-let sync={binId:null,key:null,connected:false};
+let sync={secret:null,connected:false};
 let autoTimer=null;
 
 /* ---------- load ---------- */
@@ -410,8 +409,8 @@ function load(){
   state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } });
   ensureTwelveOpen();
   if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId();
-  const b=store.get("finanzen.binId"), k=store.get("finanzen.binKey");
-  if(b&&k){ sync.binId=b; sync.key=k; sync.connected=true; }
+  const sec=store.get("finanzen.secret");
+  if(sec){ sync.secret=sec; sync.connected=true; }
 }
 function persist(){
   state.updatedAt=Date.now();
@@ -800,8 +799,9 @@ document.getElementById("fileInput").onchange=e=>{
   rd.readAsText(f); e.target.value="";
 };
 
-/* ---------- JSONBin sync ---------- */
-const API="https://api.jsonbin.io/v3/b/";
+/* ---------- Cloudflare KV Worker sync ---------- */
+const WORKER_URL="https://kv-store.neuzcore.workers.dev";
+const KV_URL=WORKER_URL+"/finanzen/data";   // gemeinsamer Store, je App über den Pfad getrennt
 function setSyncUI(stateName){
   const btn=document.getElementById("syncBtn"), lbl=document.getElementById("syncLbl");
   btn.classList.remove("on","err");
@@ -815,36 +815,38 @@ function setSyncUI(stateName){
 async function push(silent){
   if(!sync.connected) return;
   try{
-    const res=await fetch(API+encodeURIComponent(sync.binId),{
-      method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":sync.key},
+    const res=await fetch(KV_URL,{
+      method:"PUT",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+sync.secret},
       body:JSON.stringify(state)});
     if(!res.ok) throw new Error(res.status);
     setSyncUI("on"); if(!silent) toast("Hochgeladen");
   }catch(e){ setSyncUI("err"); if(!silent) toast("Upload fehlgeschlagen"); }
 }
+// Liefert {status:"ok",data} | {status:"empty"} (404, noch nichts gespeichert) | {status:"error"}
 async function pull(silent){
-  if(!sync.connected) return null;
+  if(!sync.connected) return {status:"error"};
   try{
-    const res=await fetch(API+encodeURIComponent(sync.binId)+"/latest",{
-      headers:{"X-Master-Key":sync.key,"X-Bin-Meta":"false"}});
+    const res=await fetch(KV_URL,{headers:{"Authorization":"Bearer "+sync.secret}});
+    if(res.status===404){ setSyncUI("on"); return {status:"empty"}; }
+    if(res.status===401){ setSyncUI("err"); if(!silent) toast("Secret falsch"); return {status:"error"}; }
     if(!res.ok) throw new Error(res.status);
-    const d=await res.json();
+    const d=await res.json();   // Worker liefert die Daten direkt, kein .record-Wrapper
     setSyncUI("on");
-    return d;
-  }catch(e){ setSyncUI("err"); if(!silent) toast("Laden fehlgeschlagen"); return null; }
+    return {status:"ok", data:d};
+  }catch(e){ setSyncUI("err"); if(!silent) toast("Laden fehlgeschlagen"); return {status:"error"}; }
 }
 async function connectSync(){
-  const b=document.getElementById("binId").value.trim().replace(/^.*\/b\//,"");
-  const k=document.getElementById("binKey").value.trim();
-  if(!b||!k){ toast("Bin-ID und Key eingeben"); return; }
-  sync.binId=b; sync.key=k; sync.connected=true;
+  const s=document.getElementById("workerSecret").value.trim();
+  if(!s){ toast("Worker-Secret eingeben"); return; }
+  sync.secret=s; sync.connected=true;
   setSyncUI("syncing");
-  const cloud=await pull(true);
-  if(cloud===null){ sync.connected=false; setSyncUI("err"); toast("Verbindung fehlgeschlagen – Daten prüfen"); return; }
-  store.set("finanzen.binId",b); store.set("finanzen.binKey",k);
-  if(cloud&&cloud.months&&cloud.months.length){
+  const res=await pull(true);
+  if(res.status==="error"){ sync.connected=false; sync.secret=null; setSyncUI("err"); toast("Verbindung/Secret prüfen"); return; }
+  store.set("finanzen.secret",s);
+  if(res.status==="ok" && res.data && res.data.months && res.data.months.length){
     if(confirm("In der Cloud liegen bereits Daten. Diese auf dieses Gerät übernehmen?\n\nOK = Cloud-Daten verwenden\nAbbrechen = lokale Daten in die Cloud hochladen")){
-      state=cloud; normalizeAdopted();
+      state=res.data; normalizeAdopted();
       persist(); render(); toast("Cloud-Daten übernommen");
     } else { await push(false); }
   } else { await push(false); toast("Cloud eingerichtet"); }
@@ -852,20 +854,20 @@ async function connectSync(){
 }
 async function manualPull(){
   if(!sync.connected){ toast("Erst verbinden"); return; }
-  const d=await pull(false);
-  if(d&&d.months){ state=d; normalizeAdopted(); persist(); render(); toast("Cloud geladen"); }
+  const res=await pull(false);
+  if(res.status==="ok" && res.data && res.data.months){ state=res.data; normalizeAdopted(); persist(); render(); toast("Cloud geladen"); }
+  else if(res.status==="empty"){ toast("Cloud ist noch leer"); }
 }
 async function manualPush(){ if(!sync.connected){ toast("Erst verbinden"); return; } await push(false); }
 function disconnectSync(){
-  sync.connected=false; sync.binId=null; sync.key=null;
-  store.del("finanzen.binId"); store.del("finanzen.binKey");
+  sync.connected=false; sync.secret=null;
+  store.del("finanzen.secret");
   setSyncUI("local"); closeSheets(); toast("Getrennt");
 }
 
 /* ---------- sheets ---------- */
 function openSync(){ closeSheets();
-  document.getElementById("binId").value=sync.binId||"";
-  document.getElementById("binKey").value=sync.key||"";
+  document.getElementById("workerSecret").value=sync.secret||"";
   document.getElementById("scrimSync").classList.add("open"); }
 function openMenu(){ closeSheets();
   document.getElementById("menuSyncState").textContent=sync.connected?"Verbunden":"Nicht verbunden";
@@ -885,7 +887,7 @@ load();
 document.getElementById("menuVersion").textContent=VERSION;
 document.getElementById("footVersion").textContent=VERSION;
 render();
-if(sync.connected){ setSyncUI("on"); (async()=>{ const d=await pull(true); if(d&&d.months&&(d.updatedAt||0)>(state.updatedAt||0)){ state=d; state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } }); ensureTwelveOpen(); if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId(); persist(); render(); } })(); }
+if(sync.connected){ setSyncUI("on"); (async()=>{ const res=await pull(true); if(res.status==="ok" && res.data && res.data.months && (res.data.updatedAt||0)>(state.updatedAt||0)){ state=res.data; state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } }); ensureTwelveOpen(); if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId(); persist(); render(); } })(); }
 else setSyncUI("local");
 
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }

@@ -111,7 +111,9 @@
   .sec-head .sum.income{color:var(--pos)}
   .sec-head .chev{color:var(--muted);transition:transform .2s;font-size:13px}
   .section.collapsed .chev{transform:rotate(-90deg)}
-  .section.collapsed .sec-body{display:none}
+  .section.collapsed .row.isZero{display:none}
+  .section.collapsed .add-row{display:none}
+  .sec-head .ttl .hc{font-weight:600;color:var(--muted);font-size:12px;margin-left:7px}
   .sec-body{padding:0 12px 8px}
   .accent{width:4px;height:18px;border-radius:3px;background:var(--gold)}
   .accent.income{background:var(--pos)}
@@ -297,7 +299,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.4";
+const VERSION="v1.5";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -497,20 +499,23 @@ function renderMonth(){
     card.className="section"+(collapsed?" collapsed":"")+(locked?" locked":"");
     const sum=sumSec(m,s.key);
     const isIncome=s.key==="income";
+    const rowsArr=(m.sections[s.key]||[]);
+    const zeroCount=rowsArr.filter(r=>(Number(effective(m,r))||0)===0).length;
+    const hc=(collapsed&&zeroCount)?` <small class="hc">${zeroCount}× 0 € ausgeblendet</small>`:"";
     card.innerHTML=`
       <div class="sec-head">
         <span class="accent${isIncome?' income':''}"></span>
-        <span class="ttl">${s.title}</span>
+        <span class="ttl">${s.title}${hc}</span>
         <span class="sum num${isIncome?' income':''}">${eur0.format(sum)}</span>
         <span class="chev">▾</span>
       </div>
       <div class="sec-body"></div>`;
     card.querySelector(".sec-head").onclick=()=>{
-      card.classList.toggle("collapsed");
-      store.set("finanzen.collapsed."+s.key, card.classList.contains("collapsed")?"1":"0");
+      store.set("finanzen.collapsed."+s.key, collapsed?"0":"1");
+      render();
     };
     const body=card.querySelector(".sec-body");
-    (m.sections[s.key]||[]).forEach((r,i)=>body.appendChild(rowEl(m,s.key,i,locked)));
+    rowsArr.forEach((r,i)=>body.appendChild(rowEl(m,s.key,i,locked)));
     if(!locked){
       const add=document.createElement("button");
       add.className="add-row"; add.textContent="＋ Position hinzufügen";

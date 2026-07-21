@@ -284,7 +284,7 @@
     <h2>Menü</h2>
     <button class="menu-item" onclick="closeSheets();addMonthFlow()"><span class="ic">＋</span><span>Monat hinzufügen<small>Übernimmt die Werte des letzten Monats</small></span></button>
     <button class="menu-item" onclick="closeSheets();renameMonthFlow()"><span class="ic">✎</span><span>Monat umbenennen</span></button>
-    <button class="menu-item" id="menuCloseItem" onclick="closeSheets();toggleCloseFlow()"><span class="ic" id="menuCloseIc">🔒</span><span id="menuCloseTxt">Monat abschließen<small id="menuCloseSub">Sperrt den Monat gegen Änderungen</small></span></button>
+    <button class="menu-item" id="menuCloseItem" onclick="closeSheets();closeMonthFlow()"><span class="ic" id="menuCloseIc">✓</span><span id="menuCloseTxt">Monat abschließen<small id="menuCloseSub">Entfernt den Monat – es bleiben immer 12 Monate</small></span></button>
     <button class="menu-item" onclick="closeSheets();deleteMonthFlow()"><span class="ic">🗑</span><span>Aktuellen Monat löschen<small>Entfernt ihn auch aus der Übersicht</small></span></button>
     <button class="menu-item" onclick="closeSheets();exportData()"><span class="ic">⬇</span><span>Backup speichern<small>Alle Daten als JSON-Datei</small></span></button>
     <button class="menu-item" onclick="closeSheets();importData()"><span class="ic">⬆</span><span>Backup laden</span></button>
@@ -299,7 +299,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.5";
+const VERSION="v1.6";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -393,6 +393,8 @@ function firstOpenId(){ const o=state.months.filter(m=>!m.closed).sort((a,b)=>ab
 function normalizeAdopted(){
   if(!state.months||!state.months.length){ state=defaultState(); return; }
   state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } });
+  state.months=state.months.filter(m=>!m.closed);
+  if(!state.months.length){ state=defaultState(); return; }
   ensureTwelveOpen();
   if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId();
 }
@@ -409,6 +411,8 @@ function load(){
   if(!state.months||!state.months.length) state=defaultState();
   if(!state.months.find(m=>m.id===state.currentId)) state.currentId=state.months[0].id;
   state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } });
+  state.months=state.months.filter(m=>!m.closed);   // abgeschlossene Monate entfernen
+  if(!state.months||!state.months.length) state=defaultState();
   ensureTwelveOpen();
   if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId();
   const sec=store.get("finanzen.secret");
@@ -485,14 +489,7 @@ function renderHero(){
 }
 function renderMonth(){
   const m=curMonth(), root=document.getElementById("viewMonth"); root.innerHTML="";
-  const locked=!!m.closed;
-  if(locked){
-    const bar=document.createElement("div"); bar.className="lockbar";
-    bar.innerHTML='<span>🔒 Dieser Monat ist abgeschlossen und gesperrt.</span>';
-    const rb=document.createElement("button"); rb.className="reopen"; rb.textContent="Wieder öffnen";
-    rb.onclick=reopenMonthFlow; bar.appendChild(rb);
-    root.appendChild(bar);
-  }
+  const locked=false;
   SECTIONS.forEach(s=>{
     const collapsed=store.get("finanzen.collapsed."+s.key)==="1";
     const card=document.createElement("div");
@@ -761,29 +758,24 @@ function renameMonthFlow(){
   if(v&&v.trim()){ m.label=v.trim(); persist(); render(); scheduleSync(); }
 }
 function deleteMonthFlow(){
-  if(state.months.length<=1){ toast("Mindestens ein Monat muss bleiben"); return; }
   const m=curMonth();
-  if(confirm('"'+m.label+'" wirklich löschen?\n\nDer Monat wird dauerhaft entfernt und verschwindet aus der Übersicht.')){
+  if(confirm('"'+m.label+'" wirklich löschen?\n\nDer Monat wird dauerhaft entfernt. Es wird automatisch ein Monat ergänzt, sodass wieder 12 Monate vorhanden sind.')){
     state.months=state.months.filter(x=>x.id!==m.id);
-    state.currentId=state.months[0].id; persist(); render(); scheduleSync();
+    ensureTwelveOpen();
+    state.currentId=firstOpenId();
+    persist(); render(); scheduleSync();
     toast("Monat gelöscht");
   }
 }
-function toggleCloseFlow(){ if(curMonth().closed) reopenMonthFlow(); else closeMonthFlow(); }
 function closeMonthFlow(){
   const m=curMonth();
-  if(confirm('"'+m.label+'" wirklich abschließen?\n\nDer Monat wird gegen Änderungen gesperrt und rückt in der Leiste nach hinten. Vorne wird automatisch ein neuer Monat ergänzt, sodass immer 12 offene Monate vorhanden sind. Du kannst ihn jederzeit wieder öffnen oder löschen.')){
-    m.closed=true;
+  if(confirm('"'+m.label+'" abschließen?\n\nDer Monat wird aus der Liste entfernt und hinten automatisch ein neuer Monat ergänzt – so bleiben immer 12 Monate sichtbar. (Ein Backup findest du im Menü.)')){
+    state.months=state.months.filter(x=>x.id!==m.id);
     ensureTwelveOpen();
     state.currentId=firstOpenId();
     persist(); render(); scheduleSync();
     toast(m.label+" abgeschlossen");
   }
-}
-function reopenMonthFlow(){
-  const m=curMonth();
-  m.closed=false; persist(); render(); scheduleSync();
-  toast(m.label+" wieder geöffnet");
 }
 
 /* ---------- backup ---------- */
@@ -876,10 +868,6 @@ function openSync(){ closeSheets();
   document.getElementById("scrimSync").classList.add("open"); }
 function openMenu(){ closeSheets();
   document.getElementById("menuSyncState").textContent=sync.connected?"Verbunden":"Nicht verbunden";
-  const closed=!!curMonth().closed;
-  document.getElementById("menuCloseIc").textContent=closed?"🔓":"🔒";
-  document.getElementById("menuCloseTxt").firstChild.textContent=closed?"Monat wieder öffnen":"Monat abschließen";
-  document.getElementById("menuCloseSub").textContent=closed?"Hebt die Sperre wieder auf":"Sperrt den Monat gegen Änderungen";
   document.getElementById("scrimMenu").classList.add("open"); }
 function closeSheets(){ document.querySelectorAll(".scrim").forEach(s=>s.classList.remove("open")); }
 document.querySelectorAll(".scrim").forEach(s=>s.addEventListener("click",e=>{ if(e.target===s) closeSheets(); }));
@@ -892,7 +880,7 @@ load();
 document.getElementById("menuVersion").textContent=VERSION;
 document.getElementById("footVersion").textContent=VERSION;
 render();
-if(sync.connected){ setSyncUI("on"); (async()=>{ const res=await pull(true); if(res.status==="ok" && res.data && res.data.months && (res.data.updatedAt||0)>(state.updatedAt||0)){ state=res.data; state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } }); ensureTwelveOpen(); if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId(); persist(); render(); } })(); }
+if(sync.connected){ setSyncUI("on"); (async()=>{ const res=await pull(true); if(res.status==="ok" && res.data && res.data.months && (res.data.updatedAt||0)>(state.updatedAt||0)){ state=res.data; state.months.forEach(m=>{ for(const k in m.sections){ (m.sections[k]||[]).forEach(r=>{ if(!r.kind) r.kind="monthly"; }); } }); state.months=state.months.filter(m=>!m.closed); if(!state.months.length) state=defaultState(); ensureTwelveOpen(); if(!state.months.find(m=>m.id===state.currentId)) state.currentId=firstOpenId(); persist(); render(); } })(); }
 else setSyncUI("local");
 
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }

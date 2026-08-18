@@ -265,7 +265,7 @@
     <div class="field" id="addIntvField" style="display:none"><label>In welchen Monaten fällt sie an?</label>
       <div class="intv" id="addMonths"></div>
     </div>
-    <div class="field" id="addScopeField"><label>Änderung gilt für</label>
+    <div class="field" id="addScopeField"><label>Gilt für (Speichern / Löschen)</label>
       <div class="scope" id="addScope">
         <button data-scope="this" class="on">Nur diesen Monat</button>
         <button data-scope="following">Ab diesem Monat</button>
@@ -273,6 +273,7 @@
       </div>
     </div>
     <button class="btn primary" id="addConfirm" onclick="savePosition()">Speichern</button>
+    <button class="btn danger" id="addDelete" style="display:none" onclick="deletePositionScoped()">Position löschen</button>
     <button class="btn ghost" onclick="closeSheets()">Abbrechen</button>
   </div>
 </div>
@@ -299,7 +300,7 @@
 
 <script>
 "use strict";
-const VERSION="v1.6";
+const VERSION="v1.7";
 
 /* ---------- safe storage (works on GitHub Pages; falls back to memory) ---------- */
 const mem = {};
@@ -632,6 +633,7 @@ function openAddSheet(sectionKey){
   document.getElementById("addDaily").value="";
   setSeg("monthly"); setMonths([]); setScope("following");
   document.getElementById("addConfirm").textContent="Speichern";
+  document.getElementById("addDelete").style.display="none";
   document.getElementById("scrimAdd").classList.add("open");
   setTimeout(()=>document.getElementById("addName").focus(),60);
 }
@@ -647,7 +649,28 @@ function openEditType(key,i){
   document.getElementById("addDaily").value=(r.kind==="daily"&&r.dailyBudget)?String(r.dailyBudget).replace(".",","):"";
   setSeg(addCtx.kind); setMonths(addCtx.months); setScope("this");
   document.getElementById("addConfirm").textContent="Speichern";
+  document.getElementById("addDelete").style.display="";
   document.getElementById("scrimAdd").classList.add("open");
+}
+function deletePositionScoped(){
+  if(!addCtx.edit) return;
+  const cur=curMonth(), key=addCtx.sectionKey, name=addCtx.origName;
+  const scope=addCtx.scope||"this";
+  const scopeText = scope==="all" ? "aus allen Monaten"
+                  : scope==="following" ? "aus diesem und allen folgenden Monaten"
+                  : "aus diesem Monat";
+  if(!confirm('"'+name+'" '+scopeText+' löschen?')) return;
+  const curA=absIdx(cur.id);
+  let count=0;
+  state.months.forEach(m=>{
+    if(scope==="this" && m.id!==cur.id) return;
+    if(scope==="following" && absIdx(m.id)<curA) return;
+    const arr=m.sections[key]; if(!arr) return;
+    const idx=arr.findIndex(x=>x.name===name);
+    if(idx>=0){ arr.splice(idx,1); count++; }
+  });
+  persist(); render(); scheduleSync(); closeSheets();
+  toast(count+" Position"+(count===1?"":"en")+" gelöscht");
 }
 function readForm(){
   const name=document.getElementById("addName").value.trim();
